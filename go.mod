@@ -8,6 +8,7 @@ require (
 	github.com/golang/protobuf v1.4.2
 	github.com/google/gofuzz v1.1.0
 	github.com/google/pprof v0.0.0-20200708004538-1a94d8640e99 // indirect
+	github.com/herumi/bls-eth-go-binary v0.0.0-20201104034342-d782bdf735de
 	github.com/mitchellh/mapstructure v1.3.2 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/relab/gorums v0.2.1-0.20200712223440-c8898b990cd6

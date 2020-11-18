@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -127,6 +129,162 @@ func TestVerifySig(t *testing.T) {
 	pub := sec.GetPublicKey()
 	sig := sec.SignByte(msg)
 	fmt.Printf("verify=%v\n", sig.VerifyByte(pub, msg))
+}
+
+func TestProof(t *testing.T) {
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+	fmt.Printf("Testing Proof of no commit\n")
+
+	numReplicas := int(4)
+	publicKeys := make([][]bls.PublicKey, numReplicas)
+	signatures := make([][]bls.Sign, numReplicas)
+	multisignatures := make([]bls.Sign, numReplicas)
+	bitVectors := make([]string, numReplicas)
+
+	commonView := int(6)
+	n := int64(5)
+	bitString := strconv.FormatInt(n, 2)
+
+	// Construct no-commit proof
+	for i := 0; i < numReplicas; i++ {
+		bitVectors[i] = bitString
+		signatures[i] = make([]bls.Sign, len(bitVectors[i]))
+		publicKeys[i] = make([]bls.PublicKey, len(bitVectors[i]))
+		for j := 0; j < len(bitVectors[i]); j++ {
+			if bitString[j] == 49 {
+				var sec bls.SecretKey
+				sec.SetByCSPRNG()
+				pub := sec.GetPublicKey()
+				publicKeys[i][j] = *pub
+				sig := sec.Sign(strconv.Itoa(commonView))
+				signatures[i][j] = *sig
+			}
+		}
+		var aggSig bls.Sign
+		aggSig.Aggregate(signatures[i])
+		multisignatures[i] = aggSig
+	}
+
+	// Primary verifying signatures and constructing no-commit proof
+	for i := 0; i < len(multisignatures); i++ {
+		//bv := bitVectors[i]
+		// Verify using replica i's public keys the validity of the multisig on common view
+		aggSig := multisignatures[i]
+		commonViewBytes := []byte(strconv.Itoa(commonView))
+		t.Error(aggSig.FastAggregateVerify(publicKeys[i], commonViewBytes))
+	}
+
+	/*msg := []byte("abc")
+	pub := sec.GetPublicKey()
+	sig := sec.SignByte(msg)
+	fmt.Printf("verify=%v\n", sig.VerifyByte(pub, msg))*/
+}
+
+func BenchmarkNoCommitProof(b *testing.B) {
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+	fmt.Printf("Testing Proof of no commit\n")
+
+	numReplicas := int(100)
+	publicKeys := make([][]bls.PublicKey, numReplicas)
+	signatures := make([][]bls.Sign, numReplicas)
+	multisignatures := make([]bls.Sign, numReplicas)
+	bitVectors := make([]string, numReplicas)
+
+	commonView := int(6)
+	n := int64(16)
+	bitString := strconv.FormatInt(n, 2)
+
+	// Construct no-commit proof
+	for i := 0; i < numReplicas; i++ {
+		bitVectors[i] = bitString
+		signatures[i] = make([]bls.Sign, len(bitVectors[i]))
+		publicKeys[i] = make([]bls.PublicKey, len(bitVectors[i]))
+		for j := 0; j < len(bitVectors[i]); j++ {
+			if bitString[j] == 49 {
+				var sec bls.SecretKey
+				sec.SetByCSPRNG()
+				pub := sec.GetPublicKey()
+				publicKeys[i][j] = *pub
+				sig := sec.Sign(strconv.Itoa(commonView))
+				signatures[i][j] = *sig
+			}
+		}
+		var aggSig bls.Sign
+		aggSig.Aggregate(signatures[i])
+		multisignatures[i] = aggSig
+	}
+
+	for n := 0; n < b.N; n++ {
+		// Primary verifying signatures and constructing no-commit proof
+		for i := 0; i < len(multisignatures); i++ {
+			//bv := bitVectors[i]
+			// Verify using replica i's public keys the validity of the multisig on common view
+			aggSig := multisignatures[i]
+			commonViewBytes := []byte(strconv.Itoa(commonView))
+			if !aggSig.FastAggregateVerify(publicKeys[i], commonViewBytes) {
+				b.Error("Failed verification")
+			}
+		}
+		var authenticator bls.Sign
+		authenticator.Aggregate(multisignatures)
+		/*for i := 0; i < 1; i++ {
+			bitVectors[i] = bitString
+			signatures[i] = make([]bls.Sign, len(bitVectors[i]))
+			publicKeys[i] = make([]bls.PublicKey, len(bitVectors[i]))
+			for j := 0; j < len(bitVectors[i]); j++ {
+				if bitString[j] == 49 {
+					var sec bls.SecretKey
+					sec.SetByCSPRNG()
+					pub := sec.GetPublicKey()
+					publicKeys[i][j] = *pub
+					sig := sec.Sign(strconv.Itoa(commonView))
+					signatures[i][j] = *sig
+				}
+			}
+		}*/
+	}
+}
+
+func BenchmarkNoCommitProofAlternative(b *testing.B) {
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+	fmt.Printf("Testing Proof of no commit\n")
+
+	numReplicas := int(100)
+	publicKeys := make([]bls.PublicKey, numReplicas)
+	signatures := make([]bls.Sign, numReplicas)
+	messages := make([]string, numReplicas)
+	msgs := make([]byte, numReplicas)
+
+	// Construct no-commit proof
+	for i := 0; i < numReplicas; i++ {
+		message := rand.Intn(16)
+
+		msgs[i] = byte(message)
+		messages[i] = strconv.Itoa(message)
+
+		var sec bls.SecretKey
+		sec.SetByCSPRNG()
+		pub := sec.GetPublicKey()
+		publicKeys[i] = *pub
+		sig := sec.Sign(messages[i])
+		signatures[i] = *sig
+	}
+
+	for n := 0; n < b.N; n++ {
+		// Primary verifying signatures and constructing no-commit proof
+		/*var aggSig bls.Sign
+		aggSig.Aggregate(signatures)
+		b.Error(aggSig.AggregateVerify(publicKeys, msgs))*/
+		for i := 0; i < numReplicas; i++ {
+			if !signatures[i].Verify(&publicKeys[i], messages[i]) {
+				b.Error("Failed verification")
+			}
+			//signatures[i].Verify(&publicKeys[i], messages[i])
+		}
+	}
 }
 
 func TestMultiSigVerify(t *testing.T) {

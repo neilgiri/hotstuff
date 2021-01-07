@@ -56,6 +56,26 @@ type HotStuff struct {
 	connectTimeout time.Duration
 }
 
+// HotStuff is a thing
+type HotStuffBls struct {
+	*consensus.HotStuffCore
+	tls bool
+
+	pacemaker Pacemaker
+
+	nodes map[config.ReplicaID]*proto.Node
+
+	server  *hotstuffServer
+	manager *proto.Manager
+	cfg     *proto.Configuration
+
+	closeOnce sync.Once
+
+	qcTimeout      time.Duration
+	connectTimeout time.Duration
+}
+
+
 //New creates a new GorumsHotStuff backend object.
 func New(conf *config.ReplicaConfig, pacemaker Pacemaker, tls bool, connectTimeout, qcTimeout time.Duration) *HotStuff {
 	hs := &HotStuff{

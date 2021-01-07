@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	. "github.com/relab/hotstuff/config"
 	. "github.com/relab/hotstuff/data"
 )
@@ -82,6 +83,54 @@ func TestUpdateQCHigh(t *testing.T) {
 	}
 }
 
+func TestUpdateQCHighWendy(t *testing.T) {
+	key := GeneratePrivateKeyBls()
+	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+	wendy.Blocks.Put(block1)
+	cert1 := CreateQuorumCertificateBls(block1, wendy.Config.N)
+	var secretKey bls.SecretKey
+	var secretKey1 bls.SecretKey
+	sig := secretKey.Sign("123")
+	sig1 := secretKey.Sign("123")
+
+	pk := secretKey.GetPublicKey()
+	pk1 := secretKey1.GetPublicKey()
+	cert1.Sigs[1] = *sig
+	cert1.Sigs[2] = *sig1
+	cert1.PublicKeys[0] = *pk
+	cert1.PublicKeys[1] = *pk1
+
+	qc1 := CreateQuorumCertBls(block1.Hash(), cert1)
+
+	if wendy.UpdateQCHigh(qc1) {
+		if wendy.bLeaf.Hash() != block1.Hash() {
+			t.Error("UpdateQCHigh failed to update the leaf block")
+		}
+		if !bytes.Equal(wendy.qcHigh.ToBytes(), qc1.ToBytes()) {
+			t.Error("UpdateQCHigh failed to update qcHigh")
+		}
+
+	} else {
+		t.Error("UpdateQCHigh failed to complete")
+	}
+
+	block2 := CreateLeafBls(block1, []Command{Command("command2")}, qc1, block1.Height+1)
+	wendy.Blocks.Put(block2)
+	cert2 := CreateQuorumCertificateBls(block2, wendy.Config.N)
+
+	cert2.Sigs[1] = *sig
+	cert2.Sigs[2] = *sig1
+	cert2.PublicKeys[0] = *pk
+	cert2.PublicKeys[1] = *pk1
+	qc2 := CreateQuorumCertBls(block2.Hash(), cert2)
+	wendy.UpdateQCHigh(qc2)
+
+	if wendy.UpdateQCHigh(qc1) {
+		t.Error("UpdateQCHigh updated with outdated state given as input.")
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	key, _ := GeneratePrivateKey()
 	hs := New(NewConfig(1, key, nil))
@@ -135,6 +184,90 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+func TestUpdateWendy(t *testing.T) {
+	key := GeneratePrivateKeyBls()
+	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	wendy.Config.QuorumSize = 0 // this accepts all QCs
+
+	n1 := CreateLeafBls(wendy.genesis, []Command{Command("n1")}, wendy.qcHigh, wendy.genesis.Height+1)
+	wendy.Blocks.Put(n1)
+	var secretKey bls.SecretKey
+	var secretKey1 bls.SecretKey
+	sig := secretKey.Sign("123")
+	sig1 := secretKey.Sign("123")
+
+	pk := secretKey.GetPublicKey()
+	pk1 := secretKey1.GetPublicKey()
+	cert2 := CreateQuorumCertificateBls(n1, wendy.Config.N)
+
+	cert2.Sigs[1] = *sig
+	cert2.Sigs[2] = *sig1
+	cert2.PublicKeys[0] = *pk
+	cert2.PublicKeys[1] = *pk1
+	qc1 := CreateQuorumCertBls(n1.Hash(), cert2)
+	n2 := CreateLeafBls(n1, []Command{Command("n2")}, qc1, n1.Height+1)
+	wendy.Blocks.Put(n2)
+	cert3 := CreateQuorumCertificateBls(n2, wendy.Config.N)
+
+	cert3.Sigs[1] = *sig
+	cert3.Sigs[2] = *sig1
+	cert3.PublicKeys[0] = *pk
+	cert3.PublicKeys[1] = *pk1
+
+	qc2 := CreateQuorumCertBls(n2.Hash(), cert3)
+
+	n3 := CreateLeafBls(n2, []Command{Command("n3")}, qc2, n2.Height+1)
+	wendy.Blocks.Put(n3)
+
+	cert4 := CreateQuorumCertificateBls(n3, wendy.Config.N)
+
+	cert4.Sigs[1] = *sig
+	cert4.Sigs[2] = *sig1
+	cert4.PublicKeys[0] = *pk
+	cert4.PublicKeys[1] = *pk1
+
+	qc3 := CreateQuorumCertBls(n3.Hash(), cert4)
+
+	n4 := CreateLeafBls(n3, []Command{Command("n4")}, qc3, n3.Height+1)
+	wendy.Blocks.Put(n4)
+
+	// Prepare on n1
+	wendy.update(n1)
+
+	// Lock on n1, Prepare on n2
+	wendy.update(n2)
+	// check that QCHigh and bLeaf updated
+	if wendy.bLeaf != n1 || wendy.qcHigh != n2.Justify {
+		t.Error("Lock failed")
+	}
+
+	// check that bLock got updated
+	if wendy.bLock != n1 {
+		t.Error("COMMIT failed")
+	}
+
+	// DECIDE on n1, Lock on n2, Prepare on n3
+	wendy.update(n3)
+	// check that bExec got updated and n1 got executed
+	success := true
+	if wendy.bExec != n1 {
+		success = false
+	}
+
+	select {
+	case b := <-wendy.GetExec():
+		if b[0] != n1.Commands[0] {
+			success = false
+		}
+	case <-time.After(time.Second):
+		success = false
+	}
+
+	if !success {
+		t.Error("DECIDE failed")
+	}
+}
+
 func TestOnReciveProposal(t *testing.T) {
 	key, _ := GeneratePrivateKey()
 	hs := New(NewConfig(1, key, nil))
@@ -171,6 +304,57 @@ func TestOnReciveProposal(t *testing.T) {
 	}
 }
 
+func TestOnReciveProposalWendy(t *testing.T) {
+	key := GeneratePrivateKeyBls()
+	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+
+	var secretKey bls.SecretKey
+	var secretKey1 bls.SecretKey
+	sig := secretKey.Sign("123")
+	sig1 := secretKey.Sign("123")
+
+	pk := secretKey.GetPublicKey()
+	pk1 := secretKey1.GetPublicKey()
+	cert2 := CreateQuorumCertificateBls(block1, wendy.Config.N)
+
+	cert2.Sigs[1] = *sig
+	cert2.Sigs[2] = *sig1
+	cert2.PublicKeys[0] = *pk
+	cert2.PublicKeys[1] = *pk1
+
+	qc := CreateQuorumCertBls(block1.Hash(), cert2)
+
+	pc, err := wendy.OnReceiveProposal(block1)
+
+	if err != nil {
+		t.Errorf("onReciveProposal failed with error: %w", err)
+	}
+
+	if pc == nil {
+		t.Error("onReciveProposal failed to complete")
+	} else {
+		if _, ok := wendy.Blocks.Get(block1.Hash()); !ok {
+			t.Error("onReciveProposal failed to place the new block in BlockStorage")
+		}
+		if wendy.vHeight != block1.Height {
+			t.Error("onReciveProposal failed to update the heigt of the replica")
+		}
+	}
+
+	block2 := CreateLeafBls(block1, []Command{Command("command2")}, qc, block1.Height+1)
+
+	wendy.OnReceiveProposal(block2)
+	pc, err = wendy.OnReceiveProposal(block1)
+
+	if err == nil {
+		t.Error("Block got accepted, expected rejection.")
+	}
+	if pc != nil {
+		t.Errorf("Expected nil got: %v", pc)
+	}
+}
+
 func TestExpectBlock(t *testing.T) {
 	key, _ := GeneratePrivateKey()
 	hs := New(NewConfig(1, key, nil))
@@ -185,6 +369,41 @@ func TestExpectBlock(t *testing.T) {
 	hs.mut.Lock()
 	n, ok := hs.expectBlock(qc.BlockHash)
 	hs.mut.Unlock()
+
+	if !ok && n == nil {
+		t.Fail()
+	}
+}
+
+func TestExpectBlockWendy(t *testing.T) {
+	key := GeneratePrivateKeyBls()
+	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	block := CreateLeafBls(wendy.genesis, []Command{Command("test")}, wendy.qcHigh, 1)
+
+	var secretKey bls.SecretKey
+	var secretKey1 bls.SecretKey
+	sig := secretKey.Sign("123")
+	sig1 := secretKey.Sign("123")
+
+	pk := secretKey.GetPublicKey()
+	pk1 := secretKey1.GetPublicKey()
+	cert2 := CreateQuorumCertificateBls(block, wendy.Config.N)
+
+	cert2.Sigs[1] = *sig
+	cert2.Sigs[2] = *sig1
+	cert2.PublicKeys[0] = *pk
+	cert2.PublicKeys[1] = *pk1
+
+	qc := CreateQuorumCertBls(block.Hash(), cert2)
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		wendy.OnReceiveProposal(block)
+	}()
+
+	wendy.mut.Lock()
+	n, ok := wendy.expectBlock(qc.BlockHash)
+	wendy.mut.Unlock()
 
 	if !ok && n == nil {
 		t.Fail()

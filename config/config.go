@@ -18,7 +18,7 @@ type ReplicaInfo struct {
 	PubKey  *ecdsa.PublicKey
 }
 
-// ReplicaInfo holds information about a replica
+// ReplicaInfoBls holds information about a replica
 type ReplicaInfoBls struct {
 	ID      ReplicaID
 	Address string
@@ -36,7 +36,7 @@ type ReplicaConfig struct {
 	BatchSize  int
 }
 
-// ReplicaConfig holds information needed by a replica
+// ReplicaConfigBls holds information needed by a replica
 type ReplicaConfigBls struct {
 	ID         ReplicaID
 	PrivateKey *bls.SecretKey
@@ -45,6 +45,7 @@ type ReplicaConfigBls struct {
 	Replicas   map[ReplicaID]*ReplicaInfoBls
 	QuorumSize int
 	BatchSize  int
+	N          int
 }
 
 // NewConfig returns a new ReplicaConfig instance
@@ -59,7 +60,7 @@ func NewConfig(id ReplicaID, privateKey *ecdsa.PrivateKey, cert *tls.Certificate
 	}
 }
 
-// NewConfig returns a new ReplicaConfig instance
+// NewConfigBls returns a new ReplicaConfig instance
 func NewConfigBls(id ReplicaID, privateKey *bls.SecretKey, cert *tls.Certificate) *ReplicaConfigBls {
 	return &ReplicaConfigBls{
 		ID:         id,
@@ -68,5 +69,6 @@ func NewConfigBls(id ReplicaID, privateKey *bls.SecretKey, cert *tls.Certificate
 		CertPool:   x509.NewCertPool(),
 		Replicas:   make(map[ReplicaID]*ReplicaInfoBls),
 		BatchSize:  1,
+		N:          1,
 	}
 }

@@ -14,6 +14,8 @@ import (
 	"net"
 	"os"
 	"time"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
 const privateKeyFileType = "HOTSTUFF PRIVATE KEY"
@@ -24,6 +26,15 @@ func GeneratePrivateKey() (pk *ecdsa.PrivateKey, err error) {
 	curve := elliptic.P256()
 	pk, err = ecdsa.GenerateKey(curve, rand.Reader)
 	return
+}
+
+// GeneratePrivateKeyBls returns a new public/private key pair based on BLS.
+func GeneratePrivateKeyBls() bls.SecretKey {
+	var pk bls.SecretKey
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+	pk.SetByCSPRNG()
+	return pk
 }
 
 // GenerateTLSCert generates a self-signed TLS certificate for the server that is valid for the given hosts.

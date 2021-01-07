@@ -48,6 +48,14 @@ func NewSignatureCache(conf *config.ReplicaConfig) *SignatureCache {
 	}
 }
 
+// NewSignatureCache returns a new instance of SignatureVerifier
+func NewSignatureCacheBls(conf *config.ReplicaConfigBls) *SignatureCacheBls {
+	return &SignatureCacheBls{
+		conf:               conf,
+		verifiedSignatures: make(map[string]bool),
+	}
+}
+
 // CreatePartialCert creates a partial cert from a block.
 func (s *SignatureCache) CreatePartialCert(id config.ReplicaID, privKey *ecdsa.PrivateKey, block *Block) (*PartialCert, error) {
 	hash := block.Hash()
@@ -65,7 +73,7 @@ func (s *SignatureCache) CreatePartialCert(id config.ReplicaID, privKey *ecdsa.P
 }
 
 // CreatePartialCertBls creates a partial cert from a block.
-func (s *SignatureCacheBls) CreatePartialCertBls(id config.ReplicaID, privKey *bls.SecretKey, block *Block) (*PartialCertBls, error) {
+func (s *SignatureCacheBls) CreatePartialCertBls(id config.ReplicaID, privKey *bls.SecretKey, block *BlockBls) (*PartialCertBls, error) {
 	hash := block.Hash()
 	S := privKey.SignByte(hash[:])
 
@@ -150,16 +158,22 @@ func (s *SignatureCache) VerifyQuorumCert(qc *QuorumCert) bool {
 
 // VerifyQuorumCertBls verifies a quorum certificate
 func (s *SignatureCacheBls) VerifyQuorumCertBls(qc *QuorumCertBls) bool {
-	publicKeys := make([]bls.PublicKey, len(s.conf.Replicas))
-	for i := range s.conf.Replicas {
-		publicKeys[i] = *s.conf.Replicas[i].PubKey
-	}
-
-	return qc.Authenticator.FastAggregateVerify(publicKeys, qc.BlockHash[:])
+	return qc.Authenticator.FastAggregateVerify(qc.PublicKeys, qc.BlockHash[:])
 }
 
 // EvictOld reduces the size of the cache by removing the oldest cached results
 func (s *SignatureCache) EvictOld(size int) {
+	s.mut.Lock()
+	for length := s.cache.Len(); length > size; length-- {
+		el := s.cache.Front()
+		k := s.cache.Remove(el).(string)
+		delete(s.verifiedSignatures, k)
+	}
+	s.mut.Unlock()
+}
+
+// EvictOld reduces the size of the cache by removing the oldest cached results
+func (s *SignatureCacheBls) EvictOld(size int) {
 	s.mut.Lock()
 	for length := s.cache.Len(); length > size; length-- {
 		el := s.cache.Front()
@@ -220,6 +234,13 @@ type QuorumCert struct {
 type QuorumCertBls struct {
 	Authenticator bls.Sign
 	BlockHash     BlockHash
+	PublicKeys    []bls.PublicKey
+}
+
+type QuorumCertificateBls struct {
+	Sigs       map[config.ReplicaID]bls.Sign
+	BlockHash  BlockHash
+	PublicKeys []bls.PublicKey
 }
 
 func (qc *QuorumCert) ToBytes() []byte {
@@ -271,6 +292,23 @@ func (qc *QuorumCert) AddPartial(cert *PartialCert) error {
 	return nil
 }
 
+// AddPartial adds the partial signature to the quorum cert.
+func (qc *QuorumCertificateBls) AddPartialBls(cert *PartialCertBls) error {
+	// dont add a cert if there is already a signature from the same replica
+
+	if _, exists := qc.Sigs[cert.Sig.ID]; exists {
+		return fmt.Errorf("Attempt to add partial cert from same replica twice")
+	}
+
+	if !bytes.Equal(qc.BlockHash[:], cert.BlockHash[:]) {
+		return fmt.Errorf("Partial cert hash does not match quorum cert")
+	}
+
+	qc.Sigs[cert.Sig.ID] = *cert.Sig.S
+
+	return nil
+}
+
 // CreatePartialCert creates a partial cert from a block.
 func CreatePartialCert(id config.ReplicaID, privKey *ecdsa.PrivateKey, block *Block) (*PartialCert, error) {
 	hash := block.Hash()
@@ -317,6 +355,31 @@ func CreateQuorumCert(block *Block) *QuorumCert {
 	return &QuorumCert{BlockHash: block.Hash(), Sigs: make(map[config.ReplicaID]PartialSig)}
 }
 
+// CreateQuorumCertBls creates an empty quorum certificate for a given block
+func CreateQuorumCertBls(blockHash BlockHash, cert *QuorumCertificateBls) *QuorumCertBls {
+	values := make([]bls.Sign, 0, len(cert.Sigs))
+
+	for _, v := range cert.Sigs {
+		values = append(values, v)
+	}
+
+	var aggSig bls.Sign
+
+	aggSig.Aggregate(values)
+	return &QuorumCertBls{BlockHash: blockHash, Authenticator: aggSig, PublicKeys: cert.PublicKeys}
+}
+
+// CreateQuorumCertBls creates an empty quorum certificate for a given block
+func CreateQuorumCertificateBls(block *BlockBls, N int) *QuorumCertificateBls {
+	return &QuorumCertificateBls{Sigs: make(map[config.ReplicaID]bls.Sign), BlockHash: block.Hash(), PublicKeys: make([]bls.PublicKey, 30, 30)}
+}
+
+// CreateQuorumCertGenesis creates an empty quorum certificate for a given block
+func CreateQuorumCertGenisis(blockHash BlockHash, configuration *config.ReplicaConfigBls) *QuorumCertBls {
+	var aggSig bls.Sign
+	return &QuorumCertBls{BlockHash: blockHash, Authenticator: aggSig, PublicKeys: make([]bls.PublicKey, configuration.N)}
+}
+
 // VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConfig
 func VerifyQuorumCert(conf *config.ReplicaConfig, qc *QuorumCert) bool {
 	if len(qc.Sigs) < conf.QuorumSize {
@@ -343,10 +406,5 @@ func VerifyQuorumCert(conf *config.ReplicaConfig, qc *QuorumCert) bool {
 
 // VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConfig
 func VerifyQuorumCertBls(conf *config.ReplicaConfigBls, qc *QuorumCertBls) bool {
-	publicKeys := make([]bls.PublicKey, len(conf.Replicas))
-	for i := range conf.Replicas {
-		publicKeys[i] = *conf.Replicas[i].PubKey
-	}
-
-	return qc.Authenticator.FastAggregateVerify(publicKeys, qc.BlockHash[:])
+	return qc.Authenticator.FastAggregateVerify(qc.PublicKeys, qc.BlockHash[:])
 }

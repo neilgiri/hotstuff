@@ -2,6 +2,8 @@ package data
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	c "crypto/rand"
 	"encoding/csv"
 	"encoding/hex"
 	"fmt"
@@ -112,6 +114,25 @@ func BenchmarkQuroumCertToBytes(b *testing.B) {
 	}
 }
 
+func BenchmarkVerifyP256(b *testing.B) {
+	b.ResetTimer()
+	p256 := elliptic.P256()
+	hashed := []byte("testing")
+	priv, _ := ecdsa.GenerateKey(p256, c.Reader)
+	r, s, _ := ecdsa.Sign(c.Reader, priv, hashed)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for i := 0; i < 100; i++ {
+				ecdsa.Verify(&priv.PublicKey, hashed, r, s)
+			}
+
+		}
+	})
+}
+
 func BenchmarkPartialSigToBytes(b *testing.B) {
 	pc, _ := CreatePartialCert(0, &pk, testBlock)
 	for n := 0; n < b.N; n++ {
@@ -186,10 +207,10 @@ func BenchmarkNoCommitProof(b *testing.B) {
 	bls.SetETHmode(bls.EthModeDraft07)
 	fmt.Printf("Testing Proof of no commit\n")
 
-	numReplicas := int(100)
+	numReplicas := int(1)
 	publicKeys := make([][]bls.PublicKey, numReplicas)
 	signatures := make([][]bls.Sign, numReplicas)
-	multisignatures := make([]bls.Sign, numReplicas)
+	//multisignatures := make([]bls.Sign, numReplicas)
 	bitVectors := make([]string, numReplicas)
 
 	commonView := int(6)
@@ -197,7 +218,7 @@ func BenchmarkNoCommitProof(b *testing.B) {
 	bitString := strconv.FormatInt(n, 2)
 
 	// Construct no-commit proof
-	for i := 0; i < numReplicas; i++ {
+	/*for i := 0; i < numReplicas; i++ {
 		bitVectors[i] = bitString
 		signatures[i] = make([]bls.Sign, len(bitVectors[i]))
 		publicKeys[i] = make([]bls.PublicKey, len(bitVectors[i]))
@@ -214,11 +235,31 @@ func BenchmarkNoCommitProof(b *testing.B) {
 		var aggSig bls.Sign
 		aggSig.Aggregate(signatures[i])
 		multisignatures[i] = aggSig
-	}
+	}*/
 
 	for n := 0; n < b.N; n++ {
+		// Construct no-commit proof
+		for i := 0; i < numReplicas; i++ {
+			bitVectors[i] = bitString
+			signatures[i] = make([]bls.Sign, len(bitVectors[i]))
+			publicKeys[i] = make([]bls.PublicKey, len(bitVectors[i]))
+			for j := 0; j < 1; j++ {
+				if bitString[j] == 49 {
+					var sec bls.SecretKey
+					sec.SetByCSPRNG()
+					pub := sec.GetPublicKey()
+					publicKeys[i][j] = *pub
+					sig := sec.Sign(strconv.Itoa(commonView))
+					signatures[i][j] = *sig
+				}
+			}
+			/*var aggSig bls.Sign
+			aggSig.Aggregate(signatures[i])
+			multisignatures[i] = aggSig*/
+		}
+
 		// Primary verifying signatures and constructing no-commit proof
-		for i := 0; i < len(multisignatures); i++ {
+		/*for i := 0; i < len(multisignatures); i++ {
 			// Verify using replica i's public keys the validity of the multisig on common view
 			aggSig := multisignatures[i]
 			commonViewBytes := []byte(strconv.Itoa(commonView))
@@ -227,7 +268,7 @@ func BenchmarkNoCommitProof(b *testing.B) {
 			}
 		}
 		var authenticator bls.Sign
-		authenticator.Aggregate(multisignatures)
+		authenticator.Aggregate(multisignatures)*/
 	}
 }
 
@@ -343,37 +384,40 @@ func BenchmarkNoCommitProofAlternativeTwo(b *testing.B) {
 	publicKeys := make([]bls.PublicKey, numReplicas)
 	signatures := make([]bls.Sign, numReplicas)
 	messages := make([]string, numReplicas)
-	msgs := make([]byte, numReplicas)
+	msgs := make([]byte, 32*numReplicas)
 
 	// Construct no-commit proof
 	for i := 0; i < numReplicas; i++ {
 		message := rand.Intn(16)
 
-		msgs[i] = byte(message)
+		msgs[32*i] = byte(message)
 		messages[i] = strconv.Itoa(message)
 
 		var sec bls.SecretKey
 		sec.SetByCSPRNG()
 		pub := sec.GetPublicKey()
 		publicKeys[i] = *pub
-		sig := sec.Sign(messages[i])
+		sig := sec.SignByte(msgs[32*i : 32*i+32])
 		signatures[i] = *sig
 	}
+	for i := 0; i < numReplicas; i++ {
+		if !signatures[i].VerifyByte(&publicKeys[i], msgs[32*i:32*i+32]) {
+			b.Error("Failed verification One")
+		}
+	}
+	var aggSig bls.Sign
+	aggSig.Aggregate(signatures)
 
 	for n := 0; n < b.N; n++ {
 		// Primary verifying signatures and constructing no-commit proof
 		/*var aggSig bls.Sign
 		aggSig.Aggregate(signatures)
 		b.Error(aggSig.AggregateVerify(publicKeys, msgs))*/
-		for i := 0; i < numReplicas; i++ {
-			if !signatures[i].Verify(&publicKeys[i], messages[i]) {
-				b.Error("Failed verification")
-			}
-		}
+		//b.Error(msgs)
 
-		var aggSig bls.Sign
-		aggSig.Aggregate(signatures)
-		//b.Error(aggSig.AggregateVerify(publicKeys, msgs))
+		if !aggSig.AggregateVerifyNoCheck(publicKeys, msgs) {
+			b.Error("Failed verification Two")
+		}
 	}
 }
 

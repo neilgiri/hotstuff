@@ -20,6 +20,15 @@ service Hotstuff {
   rpc NewView(QuorumCert) returns (google.protobuf.Empty) {
     option (gorums.unicast) = true;
   }
+
+  rpc NewViewWendy(NewViewBls) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc ProofNoCommit(Proof) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
 }
 
 message Block {
@@ -46,3 +55,36 @@ message QuorumCert {
 }
 
 message Command { bytes Data = 1; }
+
+message BlockBls {
+  bytes ParentHash = 1;
+  QuorumCertBls QC = 2;
+  int64 Height = 3;
+  repeated Command Commands = 4;
+}
+
+message PartialSigBls {
+  int32 ReplicaID = 1;
+  bytes S = 2;
+}
+
+message PartialCertBls {
+  PartialSigBls Sig = 1;
+  bytes Hash = 2;
+}
+
+message QuorumCertBls {
+  PartialSigBls MultiSig = 1;
+  bytes Hash = 2;
+}
+
+message NewViewBls {
+  QuorumCertBls QC = 1;
+  PartialSigBls MultiSig = 2;
+  string BitVector = 3;
+}
+
+message Proof {
+  PartialSigBls AggSig = 1;
+  repeated string BitVectors = 2; 
+}

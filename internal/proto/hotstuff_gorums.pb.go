@@ -7,7 +7,6 @@ import (
 	context "context"
 	binary "encoding/binary"
 	fmt "fmt"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	ordering "github.com/relab/gorums/ordering"
 	trace "golang.org/x/net/trace"
 	grpc "google.golang.org/grpc"
@@ -19,6 +18,7 @@ import (
 	protowire "google.golang.org/protobuf/encoding/protowire"
 	proto "google.golang.org/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	fnv "hash/fnv"
 	log "log"
 	math "math"
@@ -1254,7 +1254,7 @@ func appendIfNotPresent(set []uint32, x uint32) []uint32 {
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ empty.Empty
+var _ emptypb.Empty
 
 // Propose is a one-way multicast call on all nodes in configuration c,
 // with the same in argument. The call is asynchronous and has no return value.
@@ -1292,6 +1292,8 @@ type Hotstuff interface {
 	Propose(context.Context, *Block)
 	Vote(context.Context, *PartialCert)
 	NewView(context.Context, *QuorumCert)
+	NewViewWendy(context.Context, *NewViewBls)
+	ProofNoCommit(context.Context, *Proof)
 }
 
 func (s *GorumsServer) RegisterHotstuffServer(srv Hotstuff) {
@@ -1307,6 +1309,14 @@ func (s *GorumsServer) RegisterHotstuffServer(srv Hotstuff) {
 		req := in.message.(*QuorumCert)
 		srv.NewView(ctx, req)
 	}
+	s.srv.handlers[newViewWendyMethodID] = func(ctx context.Context, in *gorumsMessage, _ chan<- *gorumsMessage) {
+		req := in.message.(*NewViewBls)
+		srv.NewViewWendy(ctx, req)
+	}
+	s.srv.handlers[proofNoCommitMethodID] = func(ctx context.Context, in *gorumsMessage, _ chan<- *gorumsMessage) {
+		req := in.message.(*Proof)
+		srv.ProofNoCommit(ctx, req)
+	}
 }
 
 const hasOrderingMethods = true
@@ -1314,16 +1324,20 @@ const hasOrderingMethods = true
 const proposeMethodID int32 = 0
 const voteMethodID int32 = 1
 const newViewMethodID int32 = 2
+const newViewWendyMethodID int32 = 3
+const proofNoCommitMethodID int32 = 4
 
 var orderingMethods = map[int32]methodInfo{
 
-	0: {requestType: new(Block).ProtoReflect(), responseType: new(empty.Empty).ProtoReflect()},
-	1: {requestType: new(PartialCert).ProtoReflect(), responseType: new(empty.Empty).ProtoReflect()},
-	2: {requestType: new(QuorumCert).ProtoReflect(), responseType: new(empty.Empty).ProtoReflect()},
+	0: {requestType: new(Block).ProtoReflect(), responseType: new(emptypb.Empty).ProtoReflect()},
+	1: {requestType: new(PartialCert).ProtoReflect(), responseType: new(emptypb.Empty).ProtoReflect()},
+	2: {requestType: new(QuorumCert).ProtoReflect(), responseType: new(emptypb.Empty).ProtoReflect()},
+	3: {requestType: new(NewViewBls).ProtoReflect(), responseType: new(emptypb.Empty).ProtoReflect()},
+	4: {requestType: new(Proof).ProtoReflect(), responseType: new(emptypb.Empty).ProtoReflect()},
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ empty.Empty
+var _ emptypb.Empty
 
 func (n *Node) Vote(in *PartialCert) error {
 	msgID := n.nextMsgID()
@@ -1337,13 +1351,41 @@ func (n *Node) Vote(in *PartialCert) error {
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ empty.Empty
+var _ emptypb.Empty
 
 func (n *Node) NewView(in *QuorumCert) error {
 	msgID := n.nextMsgID()
 	metadata := &ordering.Metadata{
 		MessageID: msgID,
 		MethodID:  newViewMethodID,
+	}
+	msg := &gorumsMessage{metadata: metadata, message: in}
+	n.sendQ <- msg
+	return nil
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+func (n *Node) NewViewWendy(in *NewViewBls) error {
+	msgID := n.nextMsgID()
+	metadata := &ordering.Metadata{
+		MessageID: msgID,
+		MethodID:  newViewWendyMethodID,
+	}
+	msg := &gorumsMessage{metadata: metadata, message: in}
+	n.sendQ <- msg
+	return nil
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+func (n *Node) ProofNoCommit(in *Proof) error {
+	msgID := n.nextMsgID()
+	metadata := &ordering.Metadata{
+		MessageID: msgID,
+		MethodID:  proofNoCommitMethodID,
 	}
 	msg := &gorumsMessage{metadata: metadata, message: in}
 	n.sendQ <- msg

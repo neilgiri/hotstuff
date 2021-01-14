@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
 	"github.com/relab/hotstuff/consensus"
 	"github.com/relab/hotstuff/data"
@@ -58,7 +59,7 @@ type HotStuff struct {
 
 // HotStuff is a thing
 type HotStuffBls struct {
-	*consensus.HotStuffCore
+	*consensus.WendyCore
 	tls bool
 
 	pacemaker Pacemaker
@@ -74,7 +75,6 @@ type HotStuffBls struct {
 	qcTimeout      time.Duration
 	connectTimeout time.Duration
 }
-
 
 //New creates a new GorumsHotStuff backend object.
 func New(conf *config.ReplicaConfig, pacemaker Pacemaker, tls bool, connectTimeout, qcTimeout time.Duration) *HotStuff {
@@ -214,6 +214,40 @@ func (hs *HotStuff) SendNewView(id config.ReplicaID) {
 	if node, ok := hs.nodes[id]; ok {
 		node.NewView(proto.QuorumCertToProto(qc))
 	}
+}
+
+// SendNewViewBls sends a NEW-VIEW message to the leader in Wendy
+func (wendy *HotStuffBls) SendNewView(id config.ReplicaID) {
+	qc := wendy.GetQCHigh()
+	block, _ := wendy.Blocks.BlockOf(qc)
+	lockedView := block.Height
+	targetView := wendy.GetHeight() + 1
+	targetViewStr := strconv.Itoa(targetView)
+	viewDifference := targetView - lockedView
+	bitVector := strconv.FormatInt(int64(viewDifference), 2)
+	var sigs []bls.Sign
+	var aggSig bls.Sign
+
+	for i := 0; i < len(bitVector); i++ {
+		if bitVector[i] == byte('1') {
+			sigs[i] = *wendy.Config.ProofNCPrivKeys[i].Sign(targetViewStr)
+		}
+	}
+
+	aggSig.Aggregate(sigs)
+
+	/*if node, ok := wendy.nodes[id]; ok {
+		//node.NewViewWendy(proto.QuorumCertToProto())
+	}*/
+}
+
+// SendProofNoCommit sends an aggregate signature proof to a specific replica
+func (wendy *HotStuffBls) SendProofNoCommit(id config.ReplicaID) {
+
+	/*if node, ok := wendy.nodes[id]; ok {
+		//node.ProofNoCommit()
+		//node.NewView(proto.QuorumCertToProto(qc))
+	}*/
 }
 
 func (hs *HotStuff) handlePropose(block *data.Block) {

@@ -725,7 +725,7 @@ func (wc *WendyCore) update(block *data.BlockBls) {
 	}
 
 	if block1.Height > wc.bLock.Height {
-		wc.bLock = block1 // LOCK on block2
+		wc.bLock = block1 // LOCK on block1
 		logger.Println("LOCK:", block1)
 	}
 
@@ -739,7 +739,7 @@ func (wc *WendyCore) update(block *data.BlockBls) {
 	if block.ParentHash == block1.Hash() && block1.ParentHash == block2.Hash() {
 		logger.Println("DECIDE", block2)
 		wc.commit(block2)
-		wc.bExec = block2 // DECIDE on block3
+		wc.bExec = block2 // DECIDE on block2
 	}
 
 	// Free up space by deleting old data

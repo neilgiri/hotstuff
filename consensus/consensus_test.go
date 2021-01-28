@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
 	. "github.com/relab/hotstuff/config"
 	. "github.com/relab/hotstuff/data"
 )
@@ -88,20 +87,21 @@ func TestUpdateQCHighWendy(t *testing.T) {
 	wendy := NewWendy(NewConfigBls(1, &key, nil))
 	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
 	wendy.Blocks.Put(block1)
-	cert1 := CreateQuorumCertificateBls(block1, wendy.Config.N)
-	var secretKey bls.SecretKey
+	qc1 := CreateQuorumCertBls(block1)
+	//cert1 := CreateQuorumCertificateBls(block1, wendy.Config.N)
+	/*var secretKey bls.SecretKey
 	var secretKey1 bls.SecretKey
 	sig := secretKey.Sign("123")
 	sig1 := secretKey.Sign("123")
 
 	pk := secretKey.GetPublicKey()
-	pk1 := secretKey1.GetPublicKey()
-	cert1.Sigs[1] = *sig
+	pk1 := secretKey1.GetPublicKey()*/
+	/*cert1.Sigs[1] = *sig
 	cert1.Sigs[2] = *sig1
 	cert1.PublicKeys[0] = *pk
 	cert1.PublicKeys[1] = *pk1
 
-	qc1 := CreateQuorumCertBls(block1.Hash(), cert1)
+	qc1 := CreateQuorumCertBls(block1.Hash(), cert1)*/
 
 	if wendy.UpdateQCHigh(qc1) {
 		if wendy.bLeaf.Hash() != block1.Hash() {
@@ -117,13 +117,13 @@ func TestUpdateQCHighWendy(t *testing.T) {
 
 	block2 := CreateLeafBls(block1, []Command{Command("command2")}, qc1, block1.Height+1)
 	wendy.Blocks.Put(block2)
-	cert2 := CreateQuorumCertificateBls(block2, wendy.Config.N)
+	//cert2 := CreateQuorumCertificateBls(block2, wendy.Config.N)
 
-	cert2.Sigs[1] = *sig
+	/*cert2.Sigs[1] = *sig
 	cert2.Sigs[2] = *sig1
 	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1
-	qc2 := CreateQuorumCertBls(block2.Hash(), cert2)
+	cert2.PublicKeys[1] = *pk1*/
+	qc2 := CreateQuorumCertBls(block2)
 	wendy.UpdateQCHigh(qc2)
 
 	if wendy.UpdateQCHigh(qc1) {
@@ -191,7 +191,7 @@ func TestUpdateWendy(t *testing.T) {
 
 	n1 := CreateLeafBls(wendy.genesis, []Command{Command("n1")}, wendy.qcHigh, wendy.genesis.Height+1)
 	wendy.Blocks.Put(n1)
-	var secretKey bls.SecretKey
+	/*var secretKey bls.SecretKey
 	var secretKey1 bls.SecretKey
 	sig := secretKey.Sign("123")
 	sig1 := secretKey.Sign("123")
@@ -203,30 +203,30 @@ func TestUpdateWendy(t *testing.T) {
 	cert2.Sigs[1] = *sig
 	cert2.Sigs[2] = *sig1
 	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1
-	qc1 := CreateQuorumCertBls(n1.Hash(), cert2)
+	cert2.PublicKeys[1] = *pk1*/
+	qc1 := CreateQuorumCertBls(n1)
 	n2 := CreateLeafBls(n1, []Command{Command("n2")}, qc1, n1.Height+1)
 	wendy.Blocks.Put(n2)
-	cert3 := CreateQuorumCertificateBls(n2, wendy.Config.N)
+	/*cert3 := CreateQuorumCertificateBls(n2, wendy.Config.N)
 
 	cert3.Sigs[1] = *sig
 	cert3.Sigs[2] = *sig1
 	cert3.PublicKeys[0] = *pk
-	cert3.PublicKeys[1] = *pk1
+	cert3.PublicKeys[1] = *pk1*/
 
-	qc2 := CreateQuorumCertBls(n2.Hash(), cert3)
+	qc2 := CreateQuorumCertBls(n2)
 
 	n3 := CreateLeafBls(n2, []Command{Command("n3")}, qc2, n2.Height+1)
 	wendy.Blocks.Put(n3)
 
-	cert4 := CreateQuorumCertificateBls(n3, wendy.Config.N)
+	/*cert4 := CreateQuorumCertificateBls(n3, wendy.Config.N)
 
 	cert4.Sigs[1] = *sig
 	cert4.Sigs[2] = *sig1
 	cert4.PublicKeys[0] = *pk
-	cert4.PublicKeys[1] = *pk1
+	cert4.PublicKeys[1] = *pk1*/
 
-	qc3 := CreateQuorumCertBls(n3.Hash(), cert4)
+	qc3 := CreateQuorumCertBls(n3)
 
 	n4 := CreateLeafBls(n3, []Command{Command("n4")}, qc3, n3.Height+1)
 	wendy.Blocks.Put(n4)
@@ -309,7 +309,7 @@ func TestOnReciveProposalWendy(t *testing.T) {
 	wendy := NewWendy(NewConfigBls(1, &key, nil))
 	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
 
-	var secretKey bls.SecretKey
+	/*var secretKey bls.SecretKey
 	var secretKey1 bls.SecretKey
 	sig := secretKey.Sign("123")
 	sig1 := secretKey.Sign("123")
@@ -321,9 +321,9 @@ func TestOnReciveProposalWendy(t *testing.T) {
 	cert2.Sigs[1] = *sig
 	cert2.Sigs[2] = *sig1
 	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1
+	cert2.PublicKeys[1] = *pk1*/
 
-	qc := CreateQuorumCertBls(block1.Hash(), cert2)
+	qc := CreateQuorumCertBls(block1)
 
 	pc, err := wendy.OnReceiveProposal(block1)
 
@@ -380,7 +380,7 @@ func TestExpectBlockWendy(t *testing.T) {
 	wendy := NewWendy(NewConfigBls(1, &key, nil))
 	block := CreateLeafBls(wendy.genesis, []Command{Command("test")}, wendy.qcHigh, 1)
 
-	var secretKey bls.SecretKey
+	/*var secretKey bls.SecretKey
 	var secretKey1 bls.SecretKey
 	sig := secretKey.Sign("123")
 	sig1 := secretKey.Sign("123")
@@ -392,9 +392,9 @@ func TestExpectBlockWendy(t *testing.T) {
 	cert2.Sigs[1] = *sig
 	cert2.Sigs[2] = *sig1
 	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1
+	cert2.PublicKeys[1] = *pk1*/
 
-	qc := CreateQuorumCertBls(block.Hash(), cert2)
+	qc := CreateQuorumCertBls(block)
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)

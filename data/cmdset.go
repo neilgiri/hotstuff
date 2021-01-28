@@ -17,6 +17,7 @@ type CommandSet struct {
 	order list.List
 }
 
+// NewCommandSet creates a new set
 func NewCommandSet() *CommandSet {
 	c := &CommandSet{
 		set: make(map[Command]*list.Element),

@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"math/big"
 	"net"
 	"strconv"
@@ -25,28 +24,26 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-var logger *log.Logger
-
 func init() {
 	logger = logging.GetLogger()
 }
 
-// Pacemaker is a mechanism that provides synchronization
-type Pacemaker interface {
+// PacemakerWendy is a mechanism that provides synchronization
+type PacemakerWendy interface {
 	GetLeader(view int) config.ReplicaID
-	Init(*HotStuff)
+	Init(*Wendy)
 }
 
-// HotStuff is a thing
-type HotStuff struct {
-	*consensus.HotStuffCore
+// Wendy is a thing
+type Wendy struct {
+	*consensus.WendyCore
 	tls bool
 
-	pacemaker Pacemaker
+	pacemaker PacemakerWendy
 
 	nodes map[config.ReplicaID]*proto.Node
 
-	server  *hotstuffServer
+	server  *wendyServer
 	manager *proto.Manager
 	cfg     *proto.Configuration
 
@@ -56,51 +53,51 @@ type HotStuff struct {
 	connectTimeout time.Duration
 }
 
-//New creates a new GorumsHotStuff backend object.
-func New(conf *config.ReplicaConfig, pacemaker Pacemaker, tls bool, connectTimeout, qcTimeout time.Duration) *HotStuff {
-	hs := &HotStuff{
+//NewWendy creates a new GorumsHotStuff backend object.
+func NewWendy(conf *config.ReplicaConfigBls, pacemaker PacemakerWendy, tls bool, connectTimeout, qcTimeout time.Duration) *Wendy {
+	wendy := &Wendy{
 		pacemaker:      pacemaker,
-		HotStuffCore:   consensus.New(conf),
+		WendyCore:      consensus.NewWendy(conf),
 		nodes:          make(map[config.ReplicaID]*proto.Node),
 		connectTimeout: connectTimeout,
 		qcTimeout:      qcTimeout,
 	}
-	pacemaker.Init(hs)
-	return hs
+	pacemaker.Init(wendy)
+	return wendy
 }
 
 //Start starts the server and client
-func (hs *HotStuff) Start() error {
-	addr := hs.Config.Replicas[hs.Config.ID].Address
-	err := hs.startServer(addr)
+func (wendy *Wendy) Start() error {
+	addr := wendy.Config.Replicas[wendy.Config.ID].Address
+	err := wendy.startServer(addr)
 	if err != nil {
 		return fmt.Errorf("Failed to start GRPC Server: %w", err)
 	}
-	err = hs.startClient(hs.connectTimeout)
+	err = wendy.startClient(wendy.connectTimeout)
 	if err != nil {
 		return fmt.Errorf("Failed to start GRPC Clients: %w", err)
 	}
 	return nil
 }
 
-func (hs *HotStuff) startClient(connectTimeout time.Duration) error {
-	idMapping := make(map[string]uint32, len(hs.Config.Replicas)-1)
-	for _, replica := range hs.Config.Replicas {
-		if replica.ID != hs.Config.ID {
+func (wendy *Wendy) startClient(connectTimeout time.Duration) error {
+	idMapping := make(map[string]uint32, len(wendy.Config.Replicas)-1)
+	for _, replica := range wendy.Config.Replicas {
+		if replica.ID != wendy.Config.ID {
 			idMapping[replica.Address] = uint32(replica.ID)
 		}
 	}
 
 	// embed own ID to allow other replicas to identify messages from this replica
 	md := metadata.New(map[string]string{
-		"id": fmt.Sprintf("%d", hs.Config.ID),
+		"id": fmt.Sprintf("%d", wendy.Config.ID),
 	})
 
 	perNodeMD := func(nid uint32) metadata.MD {
 		var b [4]byte
 		binary.LittleEndian.PutUint32(b[:], nid)
 		hash := sha256.Sum256(b[:])
-		R, S, err := ecdsa.Sign(rand.Reader, hs.Config.PrivateKey, hash[:])
+		R, S, err := ecdsa.Sign(rand.Reader, wendy.Config.PrivateKeyCert, hash[:])
 		if err != nil {
 			panic(fmt.Errorf("Could not sign proof for replica %d: %w", nid, err))
 		}
@@ -120,7 +117,7 @@ func (hs *HotStuff) startClient(connectTimeout time.Duration) error {
 		grpc.WithReturnConnectionError(),
 	}
 
-	if hs.tls {
+	if wendy.tls {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(hs.Config.CertPool, "")))
 	} else {
 		grpcOpts = append(grpcOpts, grpc.WithInsecure())
@@ -132,13 +129,13 @@ func (hs *HotStuff) startClient(connectTimeout time.Duration) error {
 	if err != nil {
 		return fmt.Errorf("Failed to connect to replicas: %w", err)
 	}
-	hs.manager = mgr
+	wendy.manager = mgr
 
 	for _, node := range mgr.Nodes() {
-		hs.nodes[config.ReplicaID(node.ID())] = node
+		wendy.nodes[config.ReplicaID(node.ID())] = node
 	}
 
-	hs.cfg, err = hs.manager.NewConfiguration(hs.manager.NodeIDs(), &struct{}{})
+	wendy.cfg, err = wendy.manager.NewConfiguration(wendy.manager.NodeIDs(), &struct{}{})
 	if err != nil {
 		return fmt.Errorf("Failed to create configuration: %w", err)
 	}
@@ -146,8 +143,8 @@ func (hs *HotStuff) startClient(connectTimeout time.Duration) error {
 	return nil
 }
 
-// startServer runs a new instance of hotstuffServer
-func (hs *HotStuff) startServer(port string) error {
+// startServer runs a new instance of wendyServer
+func (wendy *Wendy) startServer(port string) error {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		return fmt.Errorf("Failed to listen to port %s: %w", port, err)
@@ -156,93 +153,93 @@ func (hs *HotStuff) startServer(port string) error {
 	serverOpts := []proto.ServerOption{}
 	grpcServerOpts := []grpc.ServerOption{}
 
-	if hs.tls {
-		grpcServerOpts = append(grpcServerOpts, grpc.Creds(credentials.NewServerTLSFromCert(hs.Config.Cert)))
+	if wendy.tls {
+		grpcServerOpts = append(grpcServerOpts, grpc.Creds(credentials.NewServerTLSFromCert(wendy.Config.Cert)))
 	}
 
 	serverOpts = append(serverOpts, proto.WithGRPCServerOptions(grpcServerOpts...))
 
-	hs.server = newHotStuffServer(hs, proto.NewGorumsServer(serverOpts...))
-	hs.server.RegisterHotstuffServer(hs.server)
+	wendy.server = newWendyServer(wendy, proto.NewGorumsServer(serverOpts...))
+	wendy.server.RegisterWendyServer(wendy.server)
 
-	go hs.server.Serve(lis)
+	go wendy.server.Serve(lis)
 	return nil
 }
 
 // Close closes all connections made by the HotStuff instance
-func (hs *HotStuff) Close() {
-	hs.closeOnce.Do(func() {
-		hs.HotStuffCore.Close()
-		hs.manager.Close()
-		hs.server.Stop()
+func (wendy *Wendy) Close() {
+	wendy.closeOnce.Do(func() {
+		wendy.WendyCore.Close()
+		wendy.manager.Close()
+		wendy.server.Stop()
 	})
 }
 
 // Propose broadcasts a new proposal to all replicas
-func (hs *HotStuff) Propose() {
-	proposal := hs.CreateProposal()
+func (wendy *Wendy) Propose() {
+	proposal := wendy.CreateProposal()
 	logger.Printf("Propose (%d commands): %s\n", len(proposal.Commands), proposal)
 	protobuf := proto.BlockToProto(proposal)
-	hs.cfg.Propose(protobuf)
+	wendy.cfg.Propose(protobuf)
 	// self-vote
-	hs.handlePropose(proposal)
+	wendy.handlePropose(proposal)
 }
 
 // SendNewView sends a NEW-VIEW message to a specific replica
-func (hs *HotStuff) SendNewView(id config.ReplicaID) {
-	qc := hs.GetQCHigh()
-	if node, ok := hs.nodes[id]; ok {
-		node.NewView(proto.QuorumCertToProto(qc))
+func (wendy *Wendy) SendNewView(id config.ReplicaID) {
+	qc := wendy.GetQCHigh()
+	if node, ok := wendy.nodes[id]; ok {
+		node.NewView(proto.QuorumCertBlsToProto(qc))
 	}
 }
 
-func (hs *HotStuff) handlePropose(block *data.Block) {
-	p, err := hs.OnReceiveProposal(block)
+func (wendy *Wendy) handlePropose(block *data.BlockBls) {
+	p, err := wendy.OnReceiveProposal(block)
 	if err != nil {
 		logger.Println("OnReceiveProposal returned with error:", err)
 		return
 	}
-	leaderID := hs.pacemaker.GetLeader(block.Height)
-	if hs.Config.ID == leaderID {
-		hs.OnReceiveVote(p)
-	} else if leader, ok := hs.nodes[leaderID]; ok {
+	leaderID := wendy.pacemaker.GetLeader(block.Height)
+	if wendy.Config.ID == leaderID {
+		wendy.OnReceiveVote(p)
+	} else if leader, ok := wendy.nodes[leaderID]; ok {
 		leader.Vote(proto.PartialCertToProto(p))
 	}
 }
 
-type hotstuffServer struct {
-	*HotStuff
+type wendyServer struct {
+	*Wendy
 	*proto.GorumsServer
 	// maps a stream context to client info
 	mut     sync.RWMutex
 	clients map[context.Context]config.ReplicaID
 }
 
-func newHotStuffServer(hs *HotStuff, srv *proto.GorumsServer) *hotstuffServer {
-	hsSrv := &hotstuffServer{
-		HotStuff:     hs,
+func newWendyServer(wendy *Wendy, srv *proto.GorumsServer) *wendyServer {
+	wendySrv := &wendyServer{
+		Wendy:        wendy,
 		GorumsServer: srv,
 		clients:      make(map[context.Context]config.ReplicaID),
 	}
-	return hsSrv
+	return wendySrv
 }
 
-func (hs *hotstuffServer) getClientID(ctx context.Context) (config.ReplicaID, error) {
-	hs.mut.RLock()
+func (wendy *wendyServer) getClientID(ctx context.Context) (config.ReplicaID, error) {
+	wendy.mut.RLock()
 	// fast path for known stream
-	if id, ok := hs.clients[ctx]; ok {
-		hs.mut.RUnlock()
+	if id, ok := wendy.clients[ctx]; ok {
+		wendy.mut.RUnlock()
 		return id, nil
 	}
 
-	hs.mut.RUnlock()
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
+	wendy.mut.RUnlock()
+	wendy.mut.Lock()
+	defer wendy.mut.Unlock()
 
 	// cleanup finished streams
-	for ctx := range hs.clients {
+	for ctx := range wendy.clients {
 		if ctx.Err() != nil {
-			delete(hs.clients, ctx)
+			delete(wendy.clients, ctx)
 		}
 	}
 
@@ -261,7 +258,7 @@ func (hs *hotstuffServer) getClientID(ctx context.Context) (config.ReplicaID, er
 		return 0, fmt.Errorf("getClientID: cannot parse ID field: %w", err)
 	}
 
-	info, ok := hs.Config.Replicas[config.ReplicaID(id)]
+	info, ok := wendy.Config.Replicas[config.ReplicaID(id)]
 	if !ok {
 		return 0, fmt.Errorf("getClientID: could not find info about id '%d'", id)
 	}
@@ -284,36 +281,36 @@ func (hs *hotstuffServer) getClientID(ctx context.Context) (config.ReplicaID, er
 	S.SetBytes(v1)
 
 	var b [4]byte
-	binary.LittleEndian.PutUint32(b[:], uint32(hs.Config.ID))
+	binary.LittleEndian.PutUint32(b[:], uint32(wendy.Config.ID))
 	hash := sha256.Sum256(b[:])
 
 	if !ecdsa.Verify(info.PubKey, hash[:], &R, &S) {
 		return 0, fmt.Errorf("Invalid proof")
 	}
 
-	hs.clients[ctx] = config.ReplicaID(id)
+	wendy.clients[ctx] = config.ReplicaID(id)
 	return config.ReplicaID(id), nil
 }
 
 // Propose handles a replica's response to the Propose QC from the leader
-func (hs *hotstuffServer) Propose(ctx context.Context, protoB *proto.Block) {
+func (wendy *wendyServer) Propose(ctx context.Context, protoB *proto.BlockBls) {
 	block := protoB.FromProto()
-	id, err := hs.getClientID(ctx)
+	id, err := wendy.getClientID(ctx)
 	if err != nil {
 		logger.Printf("Failed to get client ID: %v", err)
 		return
 	}
 	// defaults to 0 if error
 	block.Proposer = id
-	hs.handlePropose(block)
+	wendy.handlePropose(block)
 }
 
-func (hs *hotstuffServer) Vote(ctx context.Context, cert *proto.PartialCert) {
-	hs.OnReceiveVote(cert.FromProto())
+func (wendy *wendyServer) Vote(ctx context.Context, cert *proto.PartialCertBls) {
+	wendy.OnReceiveVote(cert.FromProto())
 }
 
 // NewView handles the leader's response to receiving a NewView rpc from a replica
-func (hs *hotstuffServer) NewView(ctx context.Context, msg *proto.QuorumCert) {
+func (wendy *wendyServer) NewView(ctx context.Context, msg *proto.QuorumCert) {
 	qc := msg.FromProto()
-	hs.OnReceiveNewView(qc)
+	wendy.OnReceiveNewView(qc)
 }

@@ -6,19 +6,10 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
 	"github.com/relab/hotstuff/data"
+	"github.com/relab/hotstuff/internal/proto/wendy"
 )
 
-func PartialSigToProto(p *data.PartialSig) *PartialSig {
-	r := p.R.Bytes()
-	s := p.S.Bytes()
-	return &PartialSig{
-		ReplicaID: int32(p.ID),
-		R:         r,
-		S:         s,
-	}
-}
-
-func PartialSigBlsToProto(p *data.PartialSigBls) *PartialSigBls {
+func PartialSigBlsToProto(p *data.PartialSigBls) *wendy.PartialSigBls {
 	s := p.S.Serialize()
 	return &PartialSigBls{
 		ReplicaID: int32(p.ID),
@@ -89,7 +80,7 @@ func QuorumCertToProto(qc *data.QuorumCert) *QuorumCert {
 }
 
 func QuorumCertBlsToProto(qc *data.QuorumCertBls) *QuorumCertBls {
-	sig := data.PartialSigBls{0, &qc.Authenticator}
+	sig := data.PartialSigBls{0, &qc.Sig}
 
 	return &QuorumCertBls{
 		MultiSig: PartialSigBlsToProto(&sig),
@@ -111,7 +102,7 @@ func (pqc *QuorumCert) FromProto() *data.QuorumCert {
 
 func (pqc *QuorumCertBls) FromProto() *data.QuorumCertBls {
 	qc := &data.QuorumCertBls{
-		Authenticator: *pqc.GetMultiSig().FromProto().S,
+		Sig: *pqc.GetMultiSig().FromProto().S,
 	}
 	copy(qc.BlockHash[:], pqc.GetHash())
 

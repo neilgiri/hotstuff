@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
 )
 
@@ -22,7 +23,7 @@ type BlockStorage interface {
 	GarbageCollectBlocks(int)
 }
 
-// BlockStorage provides a means to store a block based on its hash
+// BlockStorageBls provides a means to store a block based on its hash
 type BlockStorageBls interface {
 	Put(*BlockBls)
 	Get(BlockHash) (*BlockBls, bool)
@@ -49,6 +50,7 @@ type Block struct {
 	Committed  bool
 }
 
+// BlockBls represents a block in the tree of commands
 type BlockBls struct {
 	hash       *BlockHash
 	Proposer   config.ReplicaID
@@ -57,6 +59,21 @@ type BlockBls struct {
 	Justify    *QuorumCertBls
 	Height     int
 	Committed  bool
+}
+
+// BlockFastWendy represents a block in the tree of commands
+type BlockFastWendy struct {
+	hash           *BlockHash
+	Proposer       config.ReplicaID
+	ParentHash     BlockHash
+	Commands       []Command
+	Justify        *QuorumCertBls
+	Height         int
+	Committed      bool
+	publicKeysLock []bls.PublicKey
+	publicWeakLock []bls.PublicKey
+	aggSigLock     bls.Sign
+	aggSigWeakLock bls.Sign
 }
 
 func (n Block) String() string {
@@ -136,7 +153,7 @@ type MapStorage struct {
 	blocks map[BlockHash]*Block
 }
 
-// MapStorage is a simple implementation of BlockStorage that uses a concurrent map.
+// MapStorageBls is a simple implementation of BlockStorage that uses a concurrent map.
 type MapStorageBls struct {
 	// TODO: Experiment with RWMutex
 	mut    sync.Mutex
@@ -150,7 +167,7 @@ func NewMapStorage() *MapStorage {
 	}
 }
 
-// NewMapStorage returns a new instance of MapStorage
+// NewMapStorageBls returns a new instance of MapStorage
 func NewMapStorageBls() *MapStorageBls {
 	return &MapStorageBls{
 		blocks: make(map[BlockHash]*BlockBls),

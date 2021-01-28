@@ -20,9 +20,11 @@ type ReplicaInfo struct {
 
 // ReplicaInfoBls holds information about a replica
 type ReplicaInfoBls struct {
-	ID      ReplicaID
-	Address string
-	PubKey  *bls.PublicKey
+	ID             ReplicaID
+	Address        string
+	PubKey         *ecdsa.PublicKey
+	PubKeyBLS      *bls.PublicKey
+	ProofNCPubKeys []bls.PublicKey
 }
 
 // ReplicaConfig holds information needed by a replica
@@ -38,14 +40,31 @@ type ReplicaConfig struct {
 
 // ReplicaConfigBls holds information needed by a replica
 type ReplicaConfigBls struct {
-	ID         ReplicaID
-	PrivateKey *bls.SecretKey
-	Cert       *tls.Certificate // Own certificate
-	CertPool   *x509.CertPool   // Other replicas's certificates
-	Replicas   map[ReplicaID]*ReplicaInfoBls
-	QuorumSize int
-	BatchSize  int
-	N          int
+	ID              ReplicaID
+	PrivateKey      *bls.SecretKey
+	PrivateKeyCert  *ecdsa.PrivateKey
+	Cert            *tls.Certificate // Own certificate
+	CertPool        *x509.CertPool   // Other replicas's certificates
+	Replicas        map[ReplicaID]*ReplicaInfoBls
+	QuorumSize      int
+	BatchSize       int
+	N               int
+	ProofNCPrivKeys []bls.SecretKey
+}
+
+// ReplicaConfigBls holds information needed by a replica
+type ReplicaConfigFastWendy struct {
+	ID              ReplicaID
+	PrivateKey      *bls.SecretKey
+	PrivateKeyCert  *ecdsa.PrivateKey
+	Cert            *tls.Certificate // Own certificate
+	CertPool        *x509.CertPool   // Other replicas's certificates
+	Replicas        map[ReplicaID]*ReplicaInfoBls
+	QuorumSize      int
+	FastQuorumSize  int
+	BatchSize       int
+	N               int
+	ProofNCPrivKeys []bls.SecretKey
 }
 
 // NewConfig returns a new ReplicaConfig instance

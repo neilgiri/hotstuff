@@ -136,6 +136,7 @@ func WritePublicKeyFile(key *ecdsa.PublicKey, filePath string) (err error) {
 	return
 }
 
+// WriteCertFile returns
 func WriteCertFile(cert []byte, file string) (err error) {
 	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
@@ -204,6 +205,7 @@ func ReadPublicKeyFile(keyFile string) (key *ecdsa.PublicKey, err error) {
 	return
 }
 
+// ReadCertFile returns
 func ReadCertFile(certFile string) (cert []byte, err error) {
 	return ioutil.ReadFile(certFile)
 }

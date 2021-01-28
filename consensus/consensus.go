@@ -37,7 +37,7 @@ type Event struct {
 	Replica config.ReplicaID
 }
 
-// Event is sent to the pacemaker to allow it to observe the protocol.
+// EventBls is sent to the pacemaker to allow it to observe the protocol.
 type EventBls struct {
 	Type    EventType
 	QC      *data.QuorumCertBls
@@ -76,6 +76,7 @@ type HotStuffCore struct {
 	exec chan []data.Command
 }
 
+// AddCommand adds command to block
 func (hs *HotStuffCore) AddCommand(command data.Command) {
 	hs.cmdCache.Add(command)
 }
@@ -111,12 +112,14 @@ func (hs *HotStuffCore) GetQCHigh() *data.QuorumCert {
 	return hs.qcHigh
 }
 
+// GetEvents returns HotStuff events
 func (hs *HotStuffCore) GetEvents() chan Event {
 	c := make(chan Event)
 	hs.eventChannels = append(hs.eventChannels, c)
 	return c
 }
 
+// GetExec returns executed command
 func (hs *HotStuffCore) GetExec() chan []data.Command {
 	return hs.exec
 }
@@ -431,7 +434,7 @@ type WendyCore struct {
 	bExec      *data.BlockBls
 	bLeaf      *data.BlockBls
 	qcHigh     *data.QuorumCertBls
-	pendingQCs map[data.BlockHash]*data.QuorumCertificateBls
+	pendingQCs map[data.BlockHash]*data.QuorumCertBls
 
 	waitProposal *sync.Cond
 
@@ -439,7 +442,7 @@ type WendyCore struct {
 
 	eventChannels []chan EventBls
 
-	// stops any goroutines started by HotStuff
+	// stops any goroutines started by Wendy
 	cancel context.CancelFunc
 
 	exec chan []data.Command
@@ -474,30 +477,32 @@ func (wc *WendyCore) SetLeaf(block *data.BlockBls) {
 	wc.bLeaf = block
 }
 
-// GetQCHigh returns the highest valid Quorum Certificate known to the hotstuff instance.
+// GetQCHigh returns the highest valid Quorum Certificate known to the wendy instance.
 func (wc *WendyCore) GetQCHigh() *data.QuorumCertBls {
 	wc.mut.Lock()
 	defer wc.mut.Unlock()
 	return wc.qcHigh
 }
 
+// GetEvents returns the events
 func (wc *WendyCore) GetEvents() chan EventBls {
 	c := make(chan EventBls)
 	wc.eventChannels = append(wc.eventChannels, c)
 	return c
 }
 
+// GetExec returns the executed block
 func (wc *WendyCore) GetExec() chan []data.Command {
 	return wc.exec
 }
 
-// New creates a new Wendy instance
+// NewWendy creates a new Wendy instance
 func NewWendy(conf *config.ReplicaConfigBls) *WendyCore {
 	logger.SetPrefix(fmt.Sprintf("wc(id %d): ", conf.ID))
 	genesis := &data.BlockBls{
 		Committed: true,
 	}
-	qcForGenesis := data.CreateQuorumCertGenisis(genesis.Hash(), conf)
+	qcForGenesis := data.CreateQuorumCertBls(genesis)
 	blocks := data.NewMapStorageBls()
 	blocks.Put(genesis)
 
@@ -511,7 +516,7 @@ func NewWendy(conf *config.ReplicaConfigBls) *WendyCore {
 		bLeaf:          genesis,
 		qcHigh:         qcForGenesis,
 		Blocks:         blocks,
-		pendingQCs:     make(map[data.BlockHash]*data.QuorumCertificateBls),
+		pendingQCs:     make(map[data.BlockHash]*data.QuorumCertBls),
 		cancel:         cancel,
 		SigCache:       data.NewSignatureCacheBls(conf),
 		cmdCache:       data.NewCommandSet(),
@@ -527,7 +532,7 @@ func NewWendy(conf *config.ReplicaConfigBls) *WendyCore {
 }
 
 // expectBlock looks for a block with the given Hash, or waits for the next proposal to arrive
-// hs.mut must be locked when calling this function
+// wc.mut must be locked when calling this function
 func (wc *WendyCore) expectBlock(hash data.BlockHash) (*data.BlockBls, bool) {
 	if block, ok := wc.Blocks.Get(hash); ok {
 		return block, true
@@ -656,7 +661,7 @@ func (wc *WendyCore) OnReceiveVote(cert *data.PartialCertBls) {
 		// need to check again in case a qc was created while we waited for the block
 		qc, ok = wc.pendingQCs[cert.BlockHash]
 		if !ok {
-			qc = data.CreateQuorumCertificateBls(b, wc.Config.N)
+			qc = data.CreateQuorumCertBls(b)
 			wc.pendingQCs[cert.BlockHash] = qc
 		}
 	}
@@ -666,12 +671,12 @@ func (wc *WendyCore) OnReceiveVote(cert *data.PartialCertBls) {
 		logger.Println("OnReceiveVote: could not add partial signature to QC:", err)
 	}
 
-	if len(qc.Sigs) >= wc.Config.QuorumSize {
+	if len(qc.I) >= wc.Config.QuorumSize {
 		delete(wc.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
-		qCert := data.CreateQuorumCertBls(cert.BlockHash, qc)
-		wc.UpdateQCHigh(qCert)
-		wc.emitEvent(EventBls{Type: QCFinish, QC: qCert})
+		qc.AggregateCert()
+		wc.UpdateQCHigh(qc)
+		wc.emitEvent(EventBls{Type: QCFinish, QC: qc})
 	}
 
 	// delete any pending QCs with lower height than bLeaf
@@ -731,7 +736,6 @@ func (wc *WendyCore) update(block *data.BlockBls) {
 
 	block2, ok := wc.Blocks.BlockOf(block1.Justify)
 
-	//block3, ok := wc.Blocks.BlockOf(block2.Justify)
 	if !ok || block2.Committed {
 		return
 	}
@@ -776,7 +780,7 @@ func (wc *WendyCore) Close() {
 	wc.cancel()
 }
 
-// CreateLeaf returns a new block that extends the parent.
+// CreateLeafBls returns a new block that extends the parent.
 func CreateLeafBls(parent *data.BlockBls, cmds []data.Command, qc *data.QuorumCertBls, height int) *data.BlockBls {
 	return &data.BlockBls{
 		ParentHash: parent.Hash(),
@@ -785,3 +789,466 @@ func CreateLeafBls(parent *data.BlockBls, cmds []data.Command, qc *data.QuorumCe
 		Height:     height,
 	}
 }
+
+// FastWendyCore is the safety core of the FastWendyCore protocol
+/*type FastWendyCore struct {
+	mut sync.Mutex
+
+	// Contains the commands that are waiting to be proposed
+	cmdCache *data.CommandSet
+	Config   *config.ReplicaConfigFastWendy
+	Blocks   data.BlockStorageBls
+	SigCache *data.SignatureCacheFastWendy
+
+	// protocol data
+	vHeight      int
+	genesis      *data.BlockBls
+	bLock        *data.BlockBls
+	bExec        *data.BlockBls
+	bLeaf        *data.BlockBls
+	qcHigh       *data.QuorumCertBls
+	highVote     *data.QuorumCertBls
+	highWeakLock *data.QuorumCertBls
+	highLock     *data.QuorumCertBls
+	pendingQCs   map[data.BlockHash]*data.QuorumCertificateBls
+
+	waitProposal *sync.Cond
+
+	pendingUpdates chan *data.BlockBls
+
+	eventChannels []chan EventBls
+
+	// stops any goroutines started by HotStuff
+	cancel context.CancelFunc
+
+	exec chan []data.Command
+}
+
+// AddCommand adds a command
+func (fwc *FastWendyCore) AddCommand(command data.Command) {
+	fwc.cmdCache.Add(command)
+}
+
+// GetHeight returns the height of the tree
+func (fwc *FastWendyCore) GetHeight() int {
+	return fwc.bLeaf.Height
+}
+
+// GetVotedHeight returns the height that was last voted at
+func (fwc *FastWendyCore) GetVotedHeight() int {
+	return fwc.vHeight
+}
+
+// GetLeaf returns the current leaf node of the tree
+func (fwc *FastWendyCore) GetLeaf() *data.BlockBls {
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+	return fwc.bLeaf
+}
+
+// SetLeaf sets the leaf node of the tree
+func (fwc *FastWendyCore) SetLeaf(block *data.BlockBls) {
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+	fwc.bLeaf = block
+}
+
+// GetQCHigh returns the highest valid Quorum Certificate known to the hotstuff instance.
+func (fwc *FastWendyCore) GetQCHigh() *data.QuorumCertBls {
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+	return fwc.qcHigh
+}
+
+// GetQCHigh returns the highest valid Quorum Certificate known to the hotstuff instance.
+func (fwc *FastWendyCore) GetHighVote() *data.QuorumCertBls {
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+	return fwc.highVote
+}
+
+// GetQCHigh returns the highest valid Quorum Certificate known to the hotstuff instance.
+func (fwc *FastWendyCore) GetHighWeakLock() *data.QuorumCertBls {
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+	return fwc.highWeakLock
+}
+
+// GetQCHigh returns the highest valid Quorum Certificate known to the hotstuff instance.
+func (fwc *FastWendyCore) GetHighLock() *data.QuorumCertBls {
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+	return fwc.highLock
+}
+
+func (fwc *FastWendyCore) GetEvents() chan EventBls {
+	c := make(chan EventBls)
+	fwc.eventChannels = append(fwc.eventChannels, c)
+	return c
+}
+
+func (fwc *FastWendyCore) GetExec() chan []data.Command {
+	return fwc.exec
+}
+
+// New creates a new FastWendy instance
+func NewFastWendy(conf *config.ReplicaConfigFastWendy) *FastWendyCore {
+	logger.SetPrefix(fmt.Sprintf("wc(id %d): ", conf.ID))
+	genesis := &data.BlockBls{
+		Committed: true,
+	}
+	qcForGenesis := data.CreateQuorumCertGenisisFastWendy(genesis.Hash(), conf)
+	blocks := data.NewMapStorageBls()
+	blocks.Put(genesis)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	fwc := &FastWendyCore{
+		Config:         conf,
+		genesis:        genesis,
+		bLock:          genesis,
+		bExec:          genesis,
+		bLeaf:          genesis,
+		qcHigh:         qcForGenesis,
+		Blocks:         blocks,
+		pendingQCs:     make(map[data.BlockHash]*data.QuorumCertificateBls),
+		cancel:         cancel,
+		SigCache:       data.NewSignatureCacheFastWendy(conf),
+		cmdCache:       data.NewCommandSet(),
+		pendingUpdates: make(chan *data.BlockBls, 1),
+		exec:           make(chan []data.Command, 1),
+	}
+
+	fwc.waitProposal = sync.NewCond(&fwc.mut)
+
+	go fwc.updateAsync(ctx)
+
+	return fwc
+}
+
+// expectBlock looks for a block with the given Hash, or waits for the next proposal to arrive
+// hs.mut must be locked when calling this function
+func (fwc *FastWendyCore) expectBlock(hash data.BlockHash) (*data.BlockBls, bool) {
+	if block, ok := fwc.Blocks.Get(hash); ok {
+		return block, true
+	}
+	fwc.waitProposal.Wait()
+	return fwc.Blocks.Get(hash)
+}
+
+func (fwc *FastWendyCore) emitEvent(event EventBls) {
+	for _, c := range fwc.eventChannels {
+		c <- event
+	}
+}
+
+// UpdateQCHigh updates the qc held by the paceMaker, to the newest qc.
+func (fwc *FastWendyCore) UpdateQCHigh(qc *data.QuorumCertBls) bool {
+	if !fwc.SigCache.VerifyQuorumCertBls(qc) {
+		logger.Println("QC not verified!:", qc)
+		return false
+	}
+
+	logger.Println("UpdateQCHigh")
+
+	newQCHighBlock, ok := fwc.expectBlock(qc.BlockHash)
+	if !ok {
+		logger.Println("Could not find block of new QC!")
+		return false
+	}
+
+	oldQCHighBlock, ok := fwc.Blocks.BlockOf(fwc.qcHigh)
+	if !ok {
+		panic(fmt.Errorf("Block from the old qcHigh missing from storage"))
+	}
+
+	if newQCHighBlock.Height > oldQCHighBlock.Height {
+		fwc.qcHigh = qc
+		fwc.bLeaf = newQCHighBlock
+		fwc.emitEvent(EventBls{Type: HQCUpdate, QC: fwc.qcHigh, Block: fwc.bLeaf})
+		return true
+	}
+
+	logger.Println("UpdateQCHigh Failed")
+	return false
+}*/
+
+/*
+genesis -> block1 -> block2a | qc -> block3 | qc means block1 is committed
+				  -> block2b | fast commit-cert means block1 is committed
+f+1 votes in view change weak qc
+
+optimistic case - fast path succeeds, leader assembles a fast commit certificate and attaches it to a new proposal, when a replica receives
+the proposal it executes the fast commit certificate and votes on the proposal without needing to verify proofs/unlock/lock
+the reason is that the fast commit certificate indicates the end of the view
+for safety replica needs to check whether block extends the highest fast commit certificate
+1 -> 2 -> 3 FCC
+  -> 4 -> 5 FCC
+
+pesimisstic case - 1) fast path fails and slow path succeeds, leader assembles a slow quorum certificate and attahces it to a new proposal
+after a 2-chain can commit
+2) fast path fails and slow path fails, leader attaches highest Lock and Weak lock and proofs to the new proposal
+
+design fast blocks and slow blocks
+pipeline
+FastQC begins Decide phase for previous block and Pre-Prepare phase for current block
+when a slow block (containing a normal QC) follows a fast block then the pipeline breaks - this slow QC begins the Lock phase of the previous
+block and the Pre-Prepare phase of the current block, a fast block after begins the Decide phase of the previous previous block, the
+Decide phase of the previous block, and Pre-Prepare phase of the current block
+if instead a slow block follows then that begins the Decide phase of the previous previous block, the Lock phase of the previous block, and the
+Pre-Prepare phase of the current block
+
+for fast block safety follows from just voting on proposal with highest view
+for slow block need to compute bit vectors and aggregate signatures etc. verify proofs
+
+*/
+// OnReceiveProposal handles a replica's response to the Proposal from the leader
+/*func (fwc *FastWendyCore) OnReceiveProposal(block *data.BlockFastWendy) (*data.PartialCertBls, error) {
+	logger.Println("OnReceiveProposal:", block)
+	fwc.Blocks.Put(block)
+
+	fwc.mut.Lock()
+	qcBlock, nExists := fwc.expectBlock(block.Justify.BlockHash)
+	highLockBlock, existsHL := fwc.expectBlock(fwc.highLock.BlockHash)
+	highWeakLockBlock, existsWL := fwc.expectBlock(fwc.highWeakLock.BlockHash)
+
+	if block.Height <= fwc.vHeight {
+		fwc.mut.Unlock()
+		logger.Println("OnReceiveProposal: Block height less than vHeight")
+		return nil, fmt.Errorf("Block was not accepted")
+	}
+
+	locked := true
+	weakLocked := true
+
+	if !existsHL || (nExists && qcBlock.Height > highLockBlock.Height) {
+		locked = false
+	}
+
+	if !existsWL || (nExists && qcBlock.Height > highWeakLockBlock.Height) {
+		weakLocked = false
+	}
+
+	// if lock is higher than the qc check if qc is for the same value
+	if locked {
+		b := block
+		// check if block extends highLockBlock
+		ok := true
+		for ok && b.Height > highLockBlock.Height+1 {
+			b, ok = fwc.Blocks.Get(b.ParentHash)
+		}
+
+		if ok && b.ParentHash == fwc.bLock.Hash() {
+			locked = false
+		}
+	}
+
+	// if weak lock is higher than the qc chek if qc is for the same value
+	if weakLocked {
+		b := block
+		// check if block extends highLockBlock/highWeakBlock
+		ok := true
+		for ok && b.Height > highWeakLockBlock.Height+1 {
+			b, ok = fwc.Blocks.Get(b.ParentHash)
+		}
+
+		if ok && b.ParentHash == fwc.bLock.Hash() {
+			weakLocked = false
+		}
+	}
+
+	safe := false
+	if !locked && !weakLocked {
+		safe = true
+	} else {
+		// check proof of no commit for locks
+		if locked {
+
+		}
+
+		// check proof of no commit for weak locks
+		if weakLocked {
+
+		}
+	}
+
+	if !safe {
+		fwc.mut.Unlock()
+		logger.Println("OnReceiveProposal: Block not safe")
+		return nil, fmt.Errorf("Block was not accepted")
+	}
+
+	logger.Println("OnReceiveProposal: Accepted block")
+	fwc.vHeight = block.Height
+	fwc.cmdCache.MarkProposed(block.Commands...)
+	fwc.mut.Unlock()
+
+	fwc.waitProposal.Broadcast()
+	fwc.emitEvent(EventBls{Type: ReceiveProposal, Block: block, Replica: block.Proposer})
+
+	// queue block for update
+	fwc.pendingUpdates <- block
+
+	pc, err := fwc.SigCache.CreatePartialCertBls(fwc.Config.ID, fwc.Config.PrivateKey, block)
+	if err != nil {
+		return nil, err
+	}
+	return pc, nil
+}
+
+// OnReceiveVote handles an incoming vote from a replica
+func (fwc *FastWendyCore) OnReceiveVote(cert *data.PartialCertBls) {
+	if !fwc.SigCache.VerifySignatureBls(cert.Sig, cert.BlockHash) {
+		logger.Println("OnReceiveVote: signature not verified!")
+		return
+	}
+
+	logger.Printf("OnReceiveVote: %.8s\n", cert.BlockHash)
+	fwc.emitEvent(EventBls{Type: ReceiveVote, Replica: cert.Sig.ID})
+
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+
+	qc, ok := fwc.pendingQCs[cert.BlockHash]
+	if !ok {
+		b, ok := fwc.expectBlock(cert.BlockHash)
+		if !ok {
+			logger.Println("OnReceiveVote: could not find block for certificate.")
+			return
+		}
+		if b.Height <= fwc.bLeaf.Height {
+			// too old, don't care
+			return
+		}
+		// need to check again in case a qc was created while we waited for the block
+		qc, ok = fwc.pendingQCs[cert.BlockHash]
+		if !ok {
+			qc = data.CreateQuorumCertificateBls(b, fwc.Config.N)
+			fwc.pendingQCs[cert.BlockHash] = qc
+		}
+	}
+
+	err := qc.AddPartialBls(cert)
+	if err != nil {
+		logger.Println("OnReceiveVote: could not add partial signature to QC:", err)
+	}
+
+	if len(qc.Sigs) >= fwc.Config.QuorumSize {
+		delete(fwc.pendingQCs, cert.BlockHash)
+		logger.Println("OnReceiveVote: Created QC")
+		qCert := data.CreateQuorumCertBls(cert.BlockHash, qc)
+		fwc.UpdateQCHigh(qCert)
+		fwc.emitEvent(EventBls{Type: QCFinish, QC: qCert})
+	}
+
+	// delete any pending QCs with lower height than bLeaf
+	for k := range fwc.pendingQCs {
+		if b, ok := fwc.Blocks.Get(k); ok {
+			if b.Height <= fwc.bLeaf.Height {
+				delete(fwc.pendingQCs, k)
+			}
+		} else {
+			delete(fwc.pendingQCs, k)
+		}
+	}
+}
+
+// OnReceiveNewView handles the leader's response to receiving a NewView rpc from a replica
+func (fwc *FastWendyCore) OnReceiveNewView(qc *data.QuorumCertBls) {
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+	logger.Println("OnReceiveNewView")
+	fwc.emitEvent(EventBls{Type: ReceiveNewView, QC: qc})
+	fwc.UpdateQCHigh(qc)
+}
+
+func (fwc *FastWendyCore) updateAsync(ctx context.Context) {
+	for {
+		select {
+		case n := <-fwc.pendingUpdates:
+			fwc.update(n)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (fwc *FastWendyCore) update(block *data.BlockBls) {
+	// block1 = b'', block2 = b', block3 = b
+	block1, ok := fwc.Blocks.BlockOf(block.Justify)
+	if !ok || block1.Committed {
+		return
+	}
+
+	fwc.mut.Lock()
+	defer fwc.mut.Unlock()
+
+	logger.Println("LOCK:", block1)
+	// Lock on block1
+	fwc.UpdateQCHigh(block.Justify)
+
+	if !ok || block1.Committed {
+		return
+	}
+
+	if block1.Height > fwc.bLock.Height {
+		fwc.bLock = block1 // LOCK on block1
+		logger.Println("LOCK:", block1)
+	}
+
+	block2, ok := fwc.Blocks.BlockOf(block1.Justify)
+
+	//block3, ok := wc.Blocks.BlockOf(block2.Justify)
+	if !ok || block2.Committed {
+		return
+	}
+
+	if block.ParentHash == block1.Hash() && block1.ParentHash == block2.Hash() {
+		logger.Println("DECIDE", block2)
+		fwc.commit(block2)
+		fwc.bExec = block2 // DECIDE on block2
+	}
+
+	// Free up space by deleting old data
+	fwc.Blocks.GarbageCollectBlocks(fwc.GetVotedHeight())
+	fwc.cmdCache.TrimToLen(fwc.Config.BatchSize * 5)
+	fwc.SigCache.EvictOld(fwc.Config.QuorumSize * 5)
+}
+
+func (fwc *FastWendyCore) commit(block *data.BlockBls) {
+	// only called from within update. Thus covered by its mutex lock.
+	if fwc.bExec.Height < block.Height {
+		if parent, ok := fwc.Blocks.ParentOf(block); ok {
+			fwc.commit(parent)
+		}
+		block.Committed = true
+		logger.Println("EXEC", block)
+		fwc.exec <- block.Commands
+	}
+}
+
+// CreateProposal creates a new proposal
+func (fwc *FastWendyCore) CreateProposal() *data.BlockBls {
+	batch := fwc.cmdCache.GetFirst(fwc.Config.BatchSize)
+	fwc.mut.Lock()
+	b := CreateLeafBls(fwc.bLeaf, batch, fwc.qcHigh, fwc.bLeaf.Height+1)
+	fwc.mut.Unlock()
+	b.Proposer = fwc.Config.ID
+	fwc.Blocks.Put(b)
+	return b
+}
+
+// Close frees resources held by HotStuff and closes backend connections
+func (fwc *FastWendyCore) Close() {
+	fwc.cancel()
+}*/
+
+// CreateLeaf returns a new block that extends the parent.
+/*func CreateLeafBls(parent *data.BlockBls, cmds []data.Command, qc *data.QuorumCertBls, height int) *data.BlockBls {
+	return &data.BlockBls{
+		ParentHash: parent.Hash(),
+		Commands:   cmds,
+		Justify:    qc,
+		Height:     height,
+	}
+}*/

@@ -7,17 +7,19 @@ import (
 	"github.com/relab/hotstuff/data"
 )
 
-func PartialSigToProto(p *data.PartialSig) *hotstuff.PartialSig {
+// PartialSigToProto returns
+func PartialSigToProto(p *data.PartialSig) *PartialSig {
 	r := p.R.Bytes()
 	s := p.S.Bytes()
-	return &hotstuff.PartialSig{
+	return &PartialSig{
 		ReplicaID: int32(p.ID),
 		R:         r,
 		S:         s,
 	}
 }
 
-func (pps *hotstuff.PartialSig) FromProto() *data.PartialSig {
+// FromProto returns
+func (pps *PartialSig) FromProto() *data.PartialSig {
 	r := big.NewInt(0)
 	s := big.NewInt(0)
 	r.SetBytes(pps.GetR())
@@ -29,14 +31,16 @@ func (pps *hotstuff.PartialSig) FromProto() *data.PartialSig {
 	}
 }
 
-func PartialCertToProto(p *data.PartialCert) *hotstuff.PartialCert {
-	return &hotstuff.PartialCert{
+// PartialCertToProto returns
+func PartialCertToProto(p *data.PartialCert) *PartialCert {
+	return &PartialCert{
 		Sig:  PartialSigToProto(&p.Sig),
 		Hash: p.BlockHash[:],
 	}
 }
 
-func (ppc *hotstuff.PartialCert) FromProto() *data.PartialCert {
+// FromProto returns
+func (ppc *PartialCert) FromProto() *data.PartialCert {
 	pc := &data.PartialCert{
 		Sig: *ppc.GetSig().FromProto(),
 	}
@@ -44,18 +48,20 @@ func (ppc *hotstuff.PartialCert) FromProto() *data.PartialCert {
 	return pc
 }
 
-func QuorumCertToProto(qc *data.QuorumCert) *hotstuff.QuorumCert {
-	sigs := make([]*hotstuff.PartialSig, 0, len(qc.Sigs))
+// QuorumCertToProto returns
+func QuorumCertToProto(qc *data.QuorumCert) *QuorumCert {
+	sigs := make([]*PartialSig, 0, len(qc.Sigs))
 	for _, psig := range qc.Sigs {
 		sigs = append(sigs, PartialSigToProto(&psig))
 	}
-	return &hotstuff.QuorumCert{
+	return &QuorumCert{
 		Sigs: sigs,
 		Hash: qc.BlockHash[:],
 	}
 }
 
-func (pqc *hotstuff.QuorumCert) FromProto() *data.QuorumCert {
+// FromProto returns
+func (pqc *QuorumCert) FromProto() *data.QuorumCert {
 	qc := &data.QuorumCert{
 		Sigs: make(map[config.ReplicaID]data.PartialSig),
 	}
@@ -67,12 +73,13 @@ func (pqc *hotstuff.QuorumCert) FromProto() *data.QuorumCert {
 	return qc
 }
 
-func BlockToProto(n *data.Block) *hotstuff.Block {
-	commands := make([]*hotstuff.Command, 0, len(n.Commands))
+// BlockToProto returns
+func BlockToProto(n *data.Block) *Block {
+	commands := make([]*Command, 0, len(n.Commands))
 	for _, cmd := range n.Commands {
 		commands = append(commands, CommandToProto(cmd))
 	}
-	return &hotstuff.Block{
+	return &Block{
 		ParentHash: n.ParentHash[:],
 		Commands:   commands,
 		QC:         QuorumCertToProto(n.Justify),
@@ -80,7 +87,8 @@ func BlockToProto(n *data.Block) *hotstuff.Block {
 	}
 }
 
-func (pn *hotstuff.Block) FromProto() *data.Block {
+// FromProto returns
+func (pn *Block) FromProto() *data.Block {
 	commands := make([]data.Command, 0, len(pn.GetCommands()))
 	for _, cmd := range pn.GetCommands() {
 		commands = append(commands, cmd.FromProto())
@@ -94,10 +102,12 @@ func (pn *hotstuff.Block) FromProto() *data.Block {
 	return n
 }
 
-func CommandToProto(cmd data.Command) *hotstuff.Command {
-	return &hotstuff.Command{Data: []byte(cmd)}
+// CommandToProto returns
+func CommandToProto(cmd data.Command) *Command {
+	return &Command{Data: []byte(cmd)}
 }
 
-func (cmd *hotstuff.Command) FromProto() data.Command {
+// FromProto returns
+func (cmd *Command) FromProto() data.Command {
 	return data.Command(cmd.GetData())
 }

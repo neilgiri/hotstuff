@@ -6,7 +6,7 @@ import "gorums.proto";
 
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/relab/hotstuff/internal/proto/wendy";
+option go_package = "github.com/relab/hotstuff/internal/proto";
 
 service Wendy {
   rpc Propose(BlockBls) returns (google.protobuf.Empty) {

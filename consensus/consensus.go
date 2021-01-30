@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"sync"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
 	"github.com/relab/hotstuff/data"
 	"github.com/relab/hotstuff/internal/logging"
@@ -494,6 +496,33 @@ func (wc *WendyCore) GetEvents() chan EventBls {
 // GetExec returns the executed block
 func (wc *WendyCore) GetExec() chan []data.Command {
 	return wc.exec
+}
+
+// GetLockViewSig returns a multisignature representing the view of the highest lock certificate known to this wendy instance
+func (wc *WendyCore) GetLockViewSig() (*data.PartialSigBls, []bool) {
+	wc.mut.Lock()
+	defer wc.mut.Unlock()
+	lockCertView := wc.bLock.Height
+	bitsStr := strconv.FormatInt(int64(lockCertView), 2)
+	bitVector := make([]bool, len(bitsStr))
+	signatures := make([]bls.Sign, len(bitsStr))
+	targetView := wc.GetHeight() + 1
+
+	signatureIndex := 0
+	for i, character := range bitsStr {
+		if string(character) == "1" {
+			bitVector[i] = true
+			signatures[signatureIndex] = *wc.Config.ProofNCPrivKeys[i].Sign(strconv.Itoa(targetView))
+			signatureIndex++
+		} else {
+			bitVector[i] = false
+		}
+	}
+
+	var aggSig *bls.Sign
+	aggSig.Aggregate(signatures)
+	partialSig := data.PartialSigBls{ID: wc.Config.ID, S: aggSig}
+	return &partialSig, bitVector
 }
 
 // NewWendy creates a new Wendy instance

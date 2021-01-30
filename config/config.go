@@ -80,14 +80,15 @@ func NewConfig(id ReplicaID, privateKey *ecdsa.PrivateKey, cert *tls.Certificate
 }
 
 // NewConfigBls returns a new ReplicaConfig instance
-func NewConfigBls(id ReplicaID, privateKey *bls.SecretKey, cert *tls.Certificate) *ReplicaConfigBls {
+func NewConfigBls(id ReplicaID, privateKey *bls.SecretKey, cert *tls.Certificate, privateKeyCert *ecdsa.PrivateKey) *ReplicaConfigBls {
 	return &ReplicaConfigBls{
-		ID:         id,
-		PrivateKey: privateKey,
-		Cert:       cert,
-		CertPool:   x509.NewCertPool(),
-		Replicas:   make(map[ReplicaID]*ReplicaInfoBls),
-		BatchSize:  1,
-		N:          1,
+		ID:             id,
+		PrivateKey:     privateKey,
+		PrivateKeyCert: privateKeyCert,
+		Cert:           cert,
+		CertPool:       x509.NewCertPool(),
+		Replicas:       make(map[ReplicaID]*ReplicaInfoBls),
+		BatchSize:      1,
+		N:              1,
 	}
 }

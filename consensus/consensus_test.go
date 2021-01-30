@@ -84,7 +84,7 @@ func TestUpdateQCHigh(t *testing.T) {
 
 func TestUpdateQCHighWendy(t *testing.T) {
 	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
 	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
 	wendy.Blocks.Put(block1)
 	qc1 := CreateQuorumCertBls(block1)
@@ -186,7 +186,7 @@ func TestUpdate(t *testing.T) {
 
 func TestUpdateWendy(t *testing.T) {
 	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
 	wendy.Config.QuorumSize = 0 // this accepts all QCs
 
 	n1 := CreateLeafBls(wendy.genesis, []Command{Command("n1")}, wendy.qcHigh, wendy.genesis.Height+1)
@@ -306,7 +306,7 @@ func TestOnReciveProposal(t *testing.T) {
 
 func TestOnReciveProposalWendy(t *testing.T) {
 	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
 	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
 
 	/*var secretKey bls.SecretKey
@@ -377,7 +377,7 @@ func TestExpectBlock(t *testing.T) {
 
 func TestExpectBlockWendy(t *testing.T) {
 	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil))
+	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
 	block := CreateLeafBls(wendy.genesis, []Command{Command("test")}, wendy.qcHigh, 1)
 
 	/*var secretKey bls.SecretKey

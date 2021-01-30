@@ -19,7 +19,7 @@ import (
 	"github.com/relab/hotstuff/consensus"
 	"github.com/relab/hotstuff/data"
 	"github.com/relab/hotstuff/internal/logging"
-	"github.com/relab/hotstuff/internal/proto"
+	proto "github.com/relab/hotstuff/internal/proto/hotstuff"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"

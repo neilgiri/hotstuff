@@ -18,7 +18,7 @@ import (
 	"github.com/relab/hotstuff/consensus"
 	"github.com/relab/hotstuff/data"
 	"github.com/relab/hotstuff/internal/logging"
-	"github.com/relab/hotstuff/internal/proto"
+	proto "github.com/relab/hotstuff/internal/proto/wendy"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -118,7 +118,7 @@ func (wendy *Wendy) startClient(connectTimeout time.Duration) error {
 	}
 
 	if wendy.tls {
-		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(hs.Config.CertPool, "")))
+		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(wendy.Config.CertPool, "")))
 	} else {
 		grpcOpts = append(grpcOpts, grpc.WithInsecure())
 	}
@@ -179,7 +179,8 @@ func (wendy *Wendy) Close() {
 func (wendy *Wendy) Propose() {
 	proposal := wendy.CreateProposal()
 	logger.Printf("Propose (%d commands): %s\n", len(proposal.Commands), proposal)
-	protobuf := proto.BlockToProto(proposal)
+	protobuf := proto.BlockBlsToProto(proposal)
+
 	wendy.cfg.Propose(protobuf)
 	// self-vote
 	wendy.handlePropose(proposal)
@@ -188,8 +189,11 @@ func (wendy *Wendy) Propose() {
 // SendNewView sends a NEW-VIEW message to a specific replica
 func (wendy *Wendy) SendNewView(id config.ReplicaID) {
 	qc := wendy.GetQCHigh()
+	partialSig, bv := wendy.GetLockViewSig()
+	bitVector := proto.BitVector{Bits: bv}
+	newView := proto.NewViewBls{QC: proto.QuorumCertBlsToProto(qc), MultiSig: proto.PartialSigBlsToProto(partialSig), BV: &bitVector}
 	if node, ok := wendy.nodes[id]; ok {
-		node.NewView(proto.QuorumCertBlsToProto(qc))
+		node.NewView(&newView)
 	}
 }
 
@@ -203,7 +207,7 @@ func (wendy *Wendy) handlePropose(block *data.BlockBls) {
 	if wendy.Config.ID == leaderID {
 		wendy.OnReceiveVote(p)
 	} else if leader, ok := wendy.nodes[leaderID]; ok {
-		leader.Vote(proto.PartialCertToProto(p))
+		leader.Vote(proto.PartialCertBlsToProto(p))
 	}
 }
 
@@ -310,7 +314,14 @@ func (wendy *wendyServer) Vote(ctx context.Context, cert *proto.PartialCertBls) 
 }
 
 // NewView handles the leader's response to receiving a NewView rpc from a replica
-func (wendy *wendyServer) NewView(ctx context.Context, msg *proto.QuorumCert) {
-	qc := msg.FromProto()
-	wendy.OnReceiveNewView(qc)
+func (wendy *wendyServer) NewView(ctx context.Context, msg *proto.NewViewBls) {
+
+	//qc := msg.FromProto()
+	//wendy.OnReceiveNewView(qc)
+}
+
+// ProofNoCommit handles response to locked replica
+func (wendy *wendyServer) ProofNoCommit(ctx context.Context, msg *proto.Proof) {
+	//qc := msg.FromProto()
+	//wendy.OnReceiveNewView(qc)
 }

@@ -16,12 +16,14 @@ pc = portal.Context()
 request = pc.makeRequestRSpec()
 
 num_nodes = 4
+lan = request.LAN()
 
 for i in range(num_nodes):
     node = request.RawPC("node" + str(i))
     iface = node.addInterface("if" + str(i))
     iface.addAddress(rspec.IPv4Address("192.168.1." + str(i + 1), "255.255.255.0"))
-    node.addService(rspec.Install(url="https://golang.org/dl/go1.15.7.linux-amd64.tar.gz"))
+    lan.addInterface(iface)
+    node.addService(rspec.Install(url="https://golang.org/dl/go1.15.7.linux-amd64.tar.gz", path="/local"))
     node.addService(rspec.Execute(shell="bash", command="/local/hotstuff/scripts/install_go.sh"))
 
 

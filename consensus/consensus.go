@@ -389,6 +389,7 @@ func (hs *HotStuffCore) commit(block *data.Block) {
 		}
 		block.Committed = true
 		logger.Println("EXEC", block)
+		fmt.Printf("%s\n", block.String())
 		hs.exec <- block.Commands
 	}
 }

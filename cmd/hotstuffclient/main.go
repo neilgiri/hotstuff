@@ -163,6 +163,7 @@ func main() {
 	client.Close()
 
 	stats := client.GetStats()
+
 	throughput := stats.Throughput
 	latency := stats.LatencyAvg / float64(time.Millisecond)
 	latencySD := math.Sqrt(stats.LatencyVar) / float64(time.Millisecond)

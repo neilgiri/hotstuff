@@ -174,6 +174,7 @@ func main() {
 			latency,
 			latencySD,
 		)
+		fmt.Println(stats.TotalOps)
 	} else {
 		client.data.MeasuredThroughput = throughput
 		client.data.MeasuredLatency = latency

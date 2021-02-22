@@ -6,6 +6,7 @@ from geni.aggregate.apis import DeleteSliverError
 from geni.aggregate.frameworks import ClearinghouseError
 from geni.minigcf.config import HTTP
 from geni.util import loadContext
+from geni.util import _buildContext
 from geni.rspec import pg as rspec
 
 import datetime
@@ -25,6 +26,46 @@ agg = {
     'pg-utah': pg.UTAH_PG,
 }
 
+def startInstance(nb, diskImg, instType, index, r = None):
+    if r is None:
+        r = rspec.Request()
+
+    for i in range(nb):
+        node = rspec.RawPC("node" + str(i + index + 1))
+        node.disk_image = diskImg
+        node.hardware_type = instType
+        iface = node.addInterface("if" + str(index + i + 1))
+
+        # Specify the component id and the IPv4 address
+        iface.component_id = "eth1"
+        iface.addAddress(rspec.IPv4Address(
+            "192.168.1." + str(index + i + 1), "255.255.255.0"))
+        link = rspec.LAN("lan")
+        link.addInterface(iface)
+
+        r.addResource(node)
+    
+    return r
+
+
+def default_context(cloudlab_user=None, cloudlab_password=None, cloudlab_project=None, cloudlab_cert_path=None, cloudlab_key_path=None):
+    cloudlab_user = check_var(cloudlab_user, 'CLOUDLAB_USER')
+    cloudlab_password = check_var(cloudlab_password, 'CLOUDLAB_PASSWORD')
+    cloudlab_project = check_var(cloudlab_project, 'CLOUDLAB_PROJECT')
+    cloudlab_cert_path = check_var(cloudlab_cert_path, 'CLOUDLAB_CERT_PATH')
+    cloudlab_key_path = check_var(cloudlab_key_path, 'CLOUDLAB_PUBKEY_PATH')
+
+    with open('/tmp/context.json', 'w') as f:
+        data = {
+            "framework": "emulab-ch2",
+            "cert-path": cloudlab_cert_path,
+            "key-path": cloudlab_cert_path,
+            "user-name": cloudlab_user,
+            "user-urn": "urn:publicid:IDN+emulab.net+user+"+cloudlab_user,
+            "user-pubkeypath": cloudlab_key_path,
+            "project": cloudlab_project
+        }
+        json.dump(data, f)
 
 def check_var(argument, varname):
     if not argument and not os.environ[varname]:
@@ -57,6 +98,7 @@ def get_slice(cloudlab_user, cloudlab_password,
         json.dump(data, f)
 
     print("Loading GENI context")
+    print(cloudlab_password)
     c = loadContext("/tmp/context.json", key_passphrase=cloudlab_password)
 
     slice_id = (
@@ -89,7 +131,7 @@ def filter_unavailable_hwtypes(ctxt, requests):
     available_hwtypes = set()
 
     for site in requests:
-        print("querying site: " + site)
+        print("querying site: " + str(site))
         ad = agg[site].listresources(ctxt, available=True)
 
         for node in ad.nodes:
@@ -101,7 +143,7 @@ def filter_unavailable_hwtypes(ctxt, requests):
     for site in requests:
         print("Checking requests for site: " + site)
         for r in requests[site].resources:
-            print("Checking if node type " + r.hardware_type + " is available")
+            print("Checking if node type " + str(r.hardware_type) + " is available")
             if r.hardware_type in available_hwtypes:
                 print("  It is available!")
                 if site not in filtered_requests:
@@ -124,9 +166,9 @@ def do_request(ctxt, exp_name, requests, timeout,
 
     failed = set()
 
-    for site, request in requests.iteritems():
+    for site, request in requests.items():
 
-        print("Creating sliver on " + site)
+        print("Creating sliver on " + str(site))
 
         try:
             manifests[site] = agg[site].createsliver(ctxt, exp_name, request)

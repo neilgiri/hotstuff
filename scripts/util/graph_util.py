@@ -2,10 +2,10 @@
 
 from matplotlib import mlab
 from matplotlib import font_manager
-from scipy.interpolate import spline
+from scipy.interpolate import make_interp_spline
 import datetime
 import time
-import thread
+import _thread
 import subprocess
 import os
 import sys

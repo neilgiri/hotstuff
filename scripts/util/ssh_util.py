@@ -201,10 +201,10 @@ def sendFile(local_file, h, remote_dir, key=None, port=22):
 def sendFileHosts(local_file, hosts, remote_dir, key=None, port=22):
     for h in hosts:
         if not key:
-            cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no " + \
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no " + \
                   local_file + " " + h + ":" + remote_dir
         else:
-            cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
                   " " + local_file + " " + h + ":" + remote_dir
         executeCommand(cmd)
 

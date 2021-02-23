@@ -198,42 +198,46 @@ def loadOptionalKey(properties, key):
         prop = properties[key]
         return prop
     except:
-        return null
+        return None
 
 # Function that setups up appropriate folders on the
 # correct machines, and sends the jars. It assumes
 # that the appropriate VMs/machines have already started
 
 
-def setup(propertyFile, cloudlabFile="cloudlab.json"):
+def setup(propertyFile):
     print("Setup")
 
     properties = loadPropertyFile(propertyFile)
-    clProperties = loadPropertyFile(cloudlabFile)
-    if not properties or not clProperties:
+    #clProperties = loadPropertyFile(cloudlabFile)
+    if not properties:
         print("Empty property file, failing")
         return
 
     ##### LOADING PROPERTIES FILE ####
     user = properties['username']
-    password = properties['password']
-    project = properties['project']
+    #password = properties['password']
+    #project = properties['project']
     experimentName = properties['experimentname']
-    certificatePath = properties['certificatepath']
-    publicKeyPath = properties['publickeypath']
+    #certificatePath = properties['certificatepath']
+    #publicKeyPath = properties['publickeypath']
     localProjectDir = properties['localprojectdir']
     remoteProjectDir = properties['remoteprojectdir']
     localSrcDir = properties['localsrcdir']
-    clientCmdDir = localSrcDir + "/cmd/hotstuffclient/"
-    replicaCmdDir = localSrcDir + "/cmd/hotstuffserver/"
-    expFolder = '/results/' + experimentName
+    clientCmdDir = localSrcDir + "/cmd/hotstuffclient"
+    replicaCmdDir = localSrcDir + "/cmd/hotstuffserver"
+    expFolder = 'results/' + experimentName
     expDir = expFolder + "/" + datetime.datetime.now().strftime("%Y:%m:%d:%H:%M") + "/"
     #storageKeyName = ecProperties['cloudlab']['keyname'] + storageRegion + ".pem"
 
-    replica_ip_addresses = clProperties['replicas']
+    clientKeyName = properties['cloudlab']['client_keyname']
+    replicaKeyName = properties['cloudlab']['replica_keyname']
+
+
+    replica_ip_addresses = properties['replicas']
     #storage = ecProperties['remote_store_ip_address']
-    localPath = localProjectDir + '/' + expDir + "/"
-    remotePath = remoteProjectDir + '/' + expDir + "/"
+    localPath = localProjectDir + '/' + expDir
+    remotePath = remoteProjectDir + '/' + expDir
 
     #useProxy = toBool(ecProperties['useproxy'])
     #useStorage = toBool(ecProperties['usestorage'])
@@ -285,14 +289,14 @@ def setup(propertyFile, cloudlabFile="cloudlab.json"):
         clientIpList.append(c)
     for c in clientIpList:
         print(c)
-        mkdirRemote(c, remotePath, clientKeyName)
+        mkdirRemote(user + "@" + c, remotePath, clientKeyName)
 
     replicaIpList = list()
     for r in properties['replicas']:
         replicaIpList.append(r)
     for r in replicaIpList:
         print(r)
-        mkdirRemote(r, remotePath, replicaKeyName)
+        mkdirRemote(user + "@" + r, remotePath, replicaKeyName)
     # if (useProxy):
         # print(proxy)
         #mkdirRemote(proxy, remotePath, proxyKeyName)
@@ -313,8 +317,8 @@ def setup(propertyFile, cloudlabFile="cloudlab.json"):
     print(replicaIpList)
     # print(useStorage)
     #sendFileHosts(j, clientIpList, remotePath, clientKeyName)
-    sendFileHosts(clientExec, clientIpList, remotePath, clientKeyName)
-    sendFileHosts(replicaExec, replicaIpList, remotePath, replicaKeyName)
+    sendFileHosts(clientExec, [user + "@" + c for c in clientIpList], remotePath, clientKeyName)
+    sendFileHosts(replicaExec, [user + "@" + r for r in replicaIpList], remotePath, replicaKeyName)
     # if (useProxy):
     #sendFileHosts(j, [proxy], remotePath, proxyKeyName)
     # if (useStorage):
@@ -324,11 +328,11 @@ def setup(propertyFile, cloudlabFile="cloudlab.json"):
 
     # Create file with git hash
     executeCommand("cp " + propertyFile + " " + localPath)
-    gitHash = getGitHash(localSrcDir)
+    gitHash = getGitHash(localSrcDir).decode("utf-8")
     print("Saving Git Hash " + gitHash)
     executeCommand("touch " + localPath + "/git.txt")
     with open(localPath + "/git.txt", 'ab') as f:
-        f.write(gitHash)
+        f.write(str.encode(gitHash))
     # Write back the updated property file
     with open(propertyFile, 'w') as fp:
         json.dump(properties, fp, indent=2, sort_keys=True)

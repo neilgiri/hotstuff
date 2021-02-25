@@ -166,10 +166,10 @@ def getDirectory(local_dir, hosts, remote_dir, key=None, port=22):
     print(hosts)
     for h in hosts:
         if not key:
-            cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no -r " + \
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -r " + \
                   h + ":" + remote_dir + " " + local_dir
         else:
-            cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
                   " -r " + h + ":" + remote_dir + " " + local_dir
         executeCommand(cmd)
 
@@ -178,10 +178,10 @@ def getFile(local_dir, hosts, remote_file, key=None, port=22):
     print(hosts)
     for h in hosts:
         if not key:
-            cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no " + \
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no " + \
                   h + ":" + remote_file + " " + local_dir
         else:
-            cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
                   " " + h + ":" + remote_file + " " + local_dir
         executeCommand(cmd)
 
@@ -189,10 +189,10 @@ def getFile(local_dir, hosts, remote_file, key=None, port=22):
 # Sends file to remote host
 def sendFile(local_file, h, remote_dir, key=None, port=22):
     if not key:
-        cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no  " + \
+        cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no  " + \
               local_file + " " + h + ":" + remote_dir
     else:
-        cmd = "scp -p " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
+        cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
               " " + local_file + " " + h + ":" + remote_dir
     executeCommand(cmd)
 

@@ -389,7 +389,7 @@ func (hs *HotStuffCore) commit(block *data.Block) {
 		}
 		block.Committed = true
 		logger.Println("EXEC", block)
-		fmt.Printf("%s\n", block.String())
+		//fmt.Printf("%s\n", block.String())
 		hs.exec <- block.Commands
 	}
 }
@@ -418,6 +418,369 @@ func CreateLeaf(parent *data.Block, cmds []data.Command, qc *data.QuorumCert, he
 		Justify:    qc,
 		Height:     height,
 	}
+}
+
+// WendyCoreEC is the safety core of the HotStuffCore protocol
+type WendyCoreEC struct {
+	mut sync.Mutex
+
+	// Contains the commands that are waiting to be proposed
+	cmdCache *data.CommandSet
+	Config   *config.ReplicaConfig
+	Blocks   data.BlockStorage
+	SigCache *data.SignatureCache
+
+	// protocol data
+	vHeight    int
+	genesis    *data.Block
+	bLock      *data.Block
+	bExec      *data.Block
+	bLeaf      *data.Block
+	qcHigh     *data.QuorumCert
+	pendingQCs map[data.BlockHash]*data.QuorumCert
+
+	waitProposal *sync.Cond
+
+	pendingUpdates chan *data.Block
+
+	eventChannels []chan Event
+
+	// stops any goroutines started by HotStuff
+	cancel context.CancelFunc
+
+	exec chan []data.Command
+}
+
+// AddCommand adds command to block
+func (wendyEC *WendyCoreEC) AddCommand(command data.Command) {
+	wendyEC.cmdCache.Add(command)
+}
+
+// GetHeight returns the height of the tree
+func (wendyEC *WendyCoreEC) GetHeight() int {
+	return wendyEC.bLeaf.Height
+}
+
+// GetVotedHeight returns the height that was last voted at
+func (wendyEC *WendyCoreEC) GetVotedHeight() int {
+	return wendyEC.vHeight
+}
+
+// GetLeaf returns the current leaf node of the tree
+func (wendyEC *WendyCoreEC) GetLeaf() *data.Block {
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+	return wendyEC.bLeaf
+}
+
+// SetLeaf sets the leaf node of the tree
+func (wendyEC *WendyCoreEC) SetLeaf(block *data.Block) {
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+	wendyEC.bLeaf = block
+}
+
+// GetQCHigh returns the highest valid Quorum Certificate known to the hotstuff instance.
+func (wendyEC *WendyCoreEC) GetQCHigh() *data.QuorumCert {
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+	return wendyEC.qcHigh
+}
+
+// GetEvents returns HotStuff events
+func (wendyEC *WendyCoreEC) GetEvents() chan Event {
+	c := make(chan Event)
+	wendyEC.eventChannels = append(wendyEC.eventChannels, c)
+	return c
+}
+
+// GetExec returns executed command
+func (wendyEC *WendyCoreEC) GetExec() chan []data.Command {
+	return wendyEC.exec
+}
+
+// NewWendyEC creates a new Hotstuff instance
+func NewWendyEC(conf *config.ReplicaConfig) *WendyCoreEC {
+	logger.SetPrefix(fmt.Sprintf("wendyec(id %d): ", conf.ID))
+	genesis := &data.Block{
+		Committed: true,
+	}
+	qcForGenesis := data.CreateQuorumCert(genesis)
+	blocks := data.NewMapStorage()
+	blocks.Put(genesis)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	wendyEC := &WendyCoreEC{
+		Config:         conf,
+		genesis:        genesis,
+		bLock:          genesis,
+		bExec:          genesis,
+		bLeaf:          genesis,
+		qcHigh:         qcForGenesis,
+		Blocks:         blocks,
+		pendingQCs:     make(map[data.BlockHash]*data.QuorumCert),
+		cancel:         cancel,
+		SigCache:       data.NewSignatureCache(conf),
+		cmdCache:       data.NewCommandSet(),
+		pendingUpdates: make(chan *data.Block, 1),
+		exec:           make(chan []data.Command, 1),
+	}
+
+	wendyEC.waitProposal = sync.NewCond(&wendyEC.mut)
+
+	go wendyEC.updateAsync(ctx)
+
+	return wendyEC
+}
+
+// expectBlock looks for a block with the given Hash, or waits for the next proposal to arrive
+// hs.mut must be locked when calling this function
+func (wendyEC *WendyCoreEC) expectBlock(hash data.BlockHash) (*data.Block, bool) {
+	if block, ok := wendyEC.Blocks.Get(hash); ok {
+		return block, true
+	}
+	wendyEC.waitProposal.Wait()
+	return wendyEC.Blocks.Get(hash)
+}
+
+func (wendyEC *WendyCoreEC) emitEvent(event Event) {
+	for _, c := range wendyEC.eventChannels {
+		c <- event
+	}
+}
+
+// UpdateQCHigh updates the qc held by the paceMaker, to the newest qc.
+func (wendyEC *WendyCoreEC) UpdateQCHigh(qc *data.QuorumCert) bool {
+	if !wendyEC.SigCache.VerifyQuorumCert(qc) {
+		logger.Println("QC not verified!:", qc)
+		return false
+	}
+
+	logger.Println("UpdateQCHigh")
+
+	newQCHighBlock, ok := wendyEC.expectBlock(qc.BlockHash)
+	if !ok {
+		logger.Println("Could not find block of new QC!")
+		return false
+	}
+
+	oldQCHighBlock, ok := wendyEC.Blocks.BlockOf(wendyEC.qcHigh)
+	if !ok {
+		panic(fmt.Errorf("Block from the old qcHigh missing from storage"))
+	}
+
+	if newQCHighBlock.Height > oldQCHighBlock.Height {
+		wendyEC.qcHigh = qc
+		wendyEC.bLeaf = newQCHighBlock
+		wendyEC.emitEvent(Event{Type: HQCUpdate, QC: wendyEC.qcHigh, Block: wendyEC.bLeaf})
+		return true
+	}
+
+	logger.Println("UpdateQCHigh Failed")
+	return false
+}
+
+// OnReceiveProposal handles a replica's response to the Proposal from the leader
+func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialCert, error) {
+	logger.Println("OnReceiveProposal:", block)
+	wendyEC.Blocks.Put(block)
+
+	wendyEC.mut.Lock()
+	qcBlock, nExists := wendyEC.expectBlock(block.Justify.BlockHash)
+
+	if block.Height <= wendyEC.vHeight {
+		wendyEC.mut.Unlock()
+		logger.Println("OnReceiveProposal: Block height less than vHeight")
+		return nil, fmt.Errorf("Block was not accepted")
+	}
+
+	safe := false
+	if nExists && qcBlock.Height > wendyEC.bLock.Height {
+		safe = true
+	} else {
+		logger.Println("OnReceiveProposal: liveness condition failed")
+		// check if block extends bLock
+		b := block
+		ok := true
+		for ok && b.Height > wendyEC.bLock.Height+1 {
+			b, ok = wendyEC.Blocks.Get(b.ParentHash)
+		}
+		if ok && b.ParentHash == wendyEC.bLock.Hash() {
+			safe = true
+		} else {
+			logger.Println("OnReceiveProposal: safety condition failed")
+		}
+	}
+
+	if !safe {
+		wendyEC.mut.Unlock()
+		logger.Println("OnReceiveProposal: Block not safe")
+		return nil, fmt.Errorf("Block was not accepted")
+	}
+
+	logger.Println("OnReceiveProposal: Accepted block")
+	wendyEC.vHeight = block.Height
+	wendyEC.cmdCache.MarkProposed(block.Commands...)
+	wendyEC.mut.Unlock()
+
+	wendyEC.waitProposal.Broadcast()
+	wendyEC.emitEvent(Event{Type: ReceiveProposal, Block: block, Replica: block.Proposer})
+
+	// queue block for update
+	wendyEC.pendingUpdates <- block
+
+	pc, err := wendyEC.SigCache.CreatePartialCert(wendyEC.Config.ID, wendyEC.Config.PrivateKey, block)
+	if err != nil {
+		return nil, err
+	}
+	return pc, nil
+}
+
+// OnReceiveVote handles an incoming vote from a replica
+func (wendyEC *WendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
+	if !wendyEC.SigCache.VerifySignature(cert.Sig, cert.BlockHash) {
+		logger.Println("OnReceiveVote: signature not verified!")
+		return
+	}
+
+	logger.Printf("OnReceiveVote: %.8s\n", cert.BlockHash)
+	wendyEC.emitEvent(Event{Type: ReceiveVote, Replica: cert.Sig.ID})
+
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+
+	qc, ok := wendyEC.pendingQCs[cert.BlockHash]
+	if !ok {
+		b, ok := wendyEC.expectBlock(cert.BlockHash)
+		if !ok {
+			logger.Println("OnReceiveVote: could not find block for certificate.")
+			return
+		}
+		if b.Height <= wendyEC.bLeaf.Height {
+			// too old, don't care
+			return
+		}
+		// need to check again in case a qc was created while we waited for the block
+		qc, ok = wendyEC.pendingQCs[cert.BlockHash]
+		if !ok {
+			qc = data.CreateQuorumCert(b)
+			wendyEC.pendingQCs[cert.BlockHash] = qc
+		}
+	}
+
+	err := qc.AddPartial(cert)
+	if err != nil {
+		logger.Println("OnReceiveVote: could not add partial signature to QC:", err)
+	}
+
+	if len(qc.Sigs) >= wendyEC.Config.QuorumSize {
+		delete(wendyEC.pendingQCs, cert.BlockHash)
+		logger.Println("OnReceiveVote: Created QC")
+		wendyEC.UpdateQCHigh(qc)
+		wendyEC.emitEvent(Event{Type: QCFinish, QC: qc})
+	}
+
+	// delete any pending QCs with lower height than bLeaf
+	for k := range wendyEC.pendingQCs {
+		if b, ok := wendyEC.Blocks.Get(k); ok {
+			if b.Height <= wendyEC.bLeaf.Height {
+				delete(wendyEC.pendingQCs, k)
+			}
+		} else {
+			delete(wendyEC.pendingQCs, k)
+		}
+	}
+}
+
+// OnReceiveNewView handles the leader's response to receiving a NewView rpc from a replica
+func (wendyEC *WendyCoreEC) OnReceiveNewView(qc *data.QuorumCert) {
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+	logger.Println("OnReceiveNewView")
+	wendyEC.emitEvent(Event{Type: ReceiveNewView, QC: qc})
+	wendyEC.UpdateQCHigh(qc)
+}
+
+func (wendyEC *WendyCoreEC) updateAsync(ctx context.Context) {
+	for {
+		select {
+		case n := <-wendyEC.pendingUpdates:
+			wendyEC.update(n)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (wendyEC *WendyCoreEC) update(block *data.Block) {
+	// block1 = b'', block2 = b', block3 = b
+	block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
+	if !ok || block1.Committed {
+		return
+	}
+
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+
+	// Lock on block1
+	logger.Println("LOCK:", block1)
+	// Lock on block1
+	wendyEC.UpdateQCHigh(block.Justify)
+
+	if !ok || block1.Committed {
+		return
+	}
+
+	if block1.Height > wendyEC.bLock.Height {
+		wendyEC.bLock = block1 // Lock on block2
+		logger.Println("LOCK:", block1)
+	}
+
+	block2, ok := wendyEC.Blocks.BlockOf(block1.Justify)
+	if !ok || block2.Committed {
+		return
+	}
+
+	if block.ParentHash == block1.Hash() && block1.ParentHash == block2.Hash() {
+		logger.Println("DECIDE", block2)
+		wendyEC.commit(block2)
+		wendyEC.bExec = block2 // DECIDE on block2
+	}
+
+	// Free up space by deleting old data
+	wendyEC.Blocks.GarbageCollectBlocks(wendyEC.GetVotedHeight())
+	wendyEC.cmdCache.TrimToLen(wendyEC.Config.BatchSize * 5)
+	wendyEC.SigCache.EvictOld(wendyEC.Config.QuorumSize * 5)
+}
+
+func (wendyEC *WendyCoreEC) commit(block *data.Block) {
+	// only called from within update. Thus covered by its mutex lock.
+	if wendyEC.bExec.Height < block.Height {
+		if parent, ok := wendyEC.Blocks.ParentOf(block); ok {
+			wendyEC.commit(parent)
+		}
+		block.Committed = true
+		logger.Println("EXEC", block)
+		//fmt.Printf("%s\n", block.String())
+		wendyEC.exec <- block.Commands
+	}
+}
+
+// CreateProposal creates a new proposal
+func (wendyEC *WendyCoreEC) CreateProposal() *data.Block {
+	batch := wendyEC.cmdCache.GetFirst(wendyEC.Config.BatchSize)
+	wendyEC.mut.Lock()
+	b := CreateLeaf(wendyEC.bLeaf, batch, wendyEC.qcHigh, wendyEC.bLeaf.Height+1)
+	wendyEC.mut.Unlock()
+	b.Proposer = wendyEC.Config.ID
+	wendyEC.Blocks.Put(b)
+	return b
+}
+
+// Close frees resources held by HotStuff and closes backend connections
+func (wendyEC *WendyCoreEC) Close() {
+	wendyEC.cancel()
 }
 
 // WendyCore is the safety core of the WendyCore protocol

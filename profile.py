@@ -15,7 +15,7 @@ pc = portal.Context()
 # Create a Request object to start building the RSpec.
 request = pc.makeRequestRSpec()
 
-num_nodes = 8
+num_nodes = 10
 lan = request.LAN()
 
 for i in range(num_nodes):

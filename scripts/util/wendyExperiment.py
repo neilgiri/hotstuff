@@ -20,6 +20,7 @@ import datetime
 import time
 import random
 import multiprocessing
+import subprocess
 
 sys.path.append("util/")
 
@@ -154,7 +155,7 @@ def setupCloudlab(cloudlabFile):
 
 
 # if method called, terminate VMs
-def cleanupCloudlab(cloudlabFile, contextFile='/tmp/context.json'):
+def cleanupCloudlab(cloudlabFile, contextFile='/tmp/context.json', cred_file='/Users/neilgiridharan/.bssw/geni/emulab-ch2-giridhn-usercred.xml'):
     clProperties = loadPropertyFile(cloudlabFile)
 
     if not clProperties:
@@ -169,7 +170,7 @@ def cleanupCloudlab(cloudlabFile, contextFile='/tmp/context.json'):
     #clientKey = getOrCreateKey(clientConn, clientKeyName)
     #storageConn = startConnection(storageRegion)
     #storageKey = getOrCreateKey(storageConn, storageKeyName)
-
+    executeCommand("rm " + cred_file)
     experimentName = clProperties['name']
     replicaRegion = clProperties['cloudlab']['replica_region']
     clientRegion = clProperties['cloudlab']['client_region']
@@ -237,7 +238,7 @@ def setup(propertyFile):
     replica_ip_addresses = properties['replicas']
     #storage = ecProperties['remote_store_ip_address']
     localPath = localProjectDir + '/' + expDir
-    remotePath = remoteProjectDir + '/' + expDir
+    remotePath = remoteProjectDir + '/' + expFolder
 
     #useProxy = toBool(ecProperties['useproxy'])
     #useStorage = toBool(ecProperties['usestorage'])
@@ -344,8 +345,8 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
 
     print("Run")
     properties = loadPropertyFile(propertyFile)
-    clProperties = loadPropertyFile(cloudlabFile)
-    if not properties or not clProperties:
+    #clProperties = loadPropertyFile(cloudlabFile)
+    if not properties:
         print("Empty property file, failing")
         return
 
@@ -382,8 +383,9 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
     except:
         simulateLatency = 0
 
+    username = properties["username"]
     expDir = properties['experiment_dir']
-    remoteExpDir = remoteProjectDir + "/" + expDir
+    remoteExpDir = remoteProjectDir + "/" + expDir + "/results/" + experimentName 
     localExpDir = localProjectDir + "/" + expDir
     nbRounds = len(properties['nbclients'])
     logFolders = properties['log_folder']
@@ -416,8 +418,12 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
 
     # Setup latency on appropriate hosts if
     # simulated
-    clientKey = clientKeyName
-    replicaKey = replicaKeyName
+    clientKey = properties['cloudlab']['client_keyname']
+    replicaKey = properties['cloudlab']['replica_keyname']
+
+    clientKeyName = clientKey
+    replicaKeyName = replicaKey
+
     print("WARNING: THIS IS HACKY AND WILL NOT WORK WHEN CONFIGURING MYSQL")
     if (simulateLatency):
         print("Simulating a " + str(simulateLatency) + " ms")
@@ -461,11 +467,11 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
 
                 # Create folders on appropriate hosts
                 for c in clientIpList:
-                    mkdirRemote(c, remotePath, clientKey)
-                    mkdirRemote(c, logFolder, clientKey)
+                    mkdirRemote(username + "@" + c, remotePath, clientKey)
+                    mkdirRemote(username + "@" + c, logFolder, clientKey)
                 for r in replicaIpList:
-                    mkdirRemote(c, remotePath, replicaKey)
-                    mkdirRemote(c, logFolder, replicaKey)
+                    mkdirRemote(username + "@" + c, remotePath, replicaKey)
+                    mkdirRemote(username + "@" + c, logFolder, replicaKey)
 
                 # if (useProxy):
                     #mkdirRemote(proxy, remotePath, proxyKey)
@@ -524,19 +530,19 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     json.dump(properties, fp, indent=2, sort_keys=True)
                 print("Sending Property File and Starting Server")
                 for replica in replicaIpList:
-                    sendFile(localProp_, replica, remotePath, replicaKey)
+                    sendFile(localProp_, username + "@" + replica, remotePath, replicaKey)
                     # cmd = "cd " + remoteExpDir + " ; " + javaCommandServer + " -cp " + jarName + " " + proxyMainClass + " " + remoteProp_ + " 1>" + \
                     #    remotePath + "/proxy" l+ \
                     #    str(sid) + ".log 2>" + remotePath + \
                     #    "/proxy_err" + str(sid) + ".og"
 
-                    cmd = "cd " + remoteExpDir + " ; " + goCommandReplica + " 1>" + \
+                    cmd = "cd " + remoteExpDir + " ; " + goCommandReplica + " 1> " + \
                         remotePath + "/replica_" + replica + "_" + \
                         str(sid) + ".log"
                     sid += 1
 
                     print(cmd)
-                    t = executeNonBlockingRemoteCommand(
+                    t = executeNonBlockingRemoteCommand(username + "@" +
                         replica, cmd, replicaKeyName)
                     t.start()
 
@@ -591,7 +597,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                         str(cid) + "_" + properties['run_name']
                     with open(localProp_, 'w') as fp:
                         json.dump(properties, fp, indent=2, sort_keys=True)
-                    sendFile(localProp_, ip, remoteProp_, clientKeyName)
+                    sendFile(localProp_, username + "@" + ip, remoteProp_, clientKeyName)
                     # cmd = "cd " + remoteExpDir + " ; " + javaCommandClient + " -cp " + clientMainClass + " " + jarName + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
@@ -601,7 +607,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     cmd = "cd " + remoteExpDir + " ; " + goCommandClient + " 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
-                    t = executeNonBlockingRemoteCommand(ip, cmd, clientKeyName)
+                    t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
                     client_list.append(t)
                     properties['run_name'] = oldRunName
 
@@ -611,7 +617,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     t.start()
                 for t in client_list:
                     t.join(9600)
-                collectData(propertyFile, ecFile, localPath, remotePath)
+                collectData(propertyFile, cloudlabFile, localPath, remotePath)
                 time.sleep(60)
                 print("Finished Round")
                 print("---------------")
@@ -621,14 +627,14 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 for c in clientIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            c, "ps -ef | grep hotstuffclient | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                            username + "@" + c, "ps -ef | grep hotstuffclient | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
                     except Exception as e:
                         print(" ")
 
                 for r in replicaIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            r, "ps -ef | grep hotstuffserver | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                            username + "@" + r, "ps -ef | grep hotstuffserver | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
                     except Exception as e:
                         print(" ")
 
@@ -676,8 +682,11 @@ def cleanup(propertyFile, cloudlabFile="cloudlab.json"):
     if not properties or not clProperties:
         print("Empty property file, failing")
     #storageKeyName = ecProperties['cloudlab']['keyname'] + storageRegion + ".pem"
-    #experimentName = properties['experimentname']
+    experimentName = properties['experimentname']
     user = properties['username']
+
+    clientKeyName = properties['cloudlab']['client_keyname']
+    replicaKeyName = properties['cloudlab']['replica_keyname']
 
     #useStorage = toBool(properties['usestorage'])
     #useProxy = toBool(properties['useproxy'])
@@ -746,8 +755,8 @@ def collectData(propertyFile, cloudlabFile, localFolder, remoteFolder):
     print("Collect Data")
 
     properties = loadPropertyFile(propertyFile)
-    clProperties = loadPropertyFile(cloudlabFile)
-    if not properties or not clProperties:
+    #clProperties = loadPropertyFile(cloudlabFile)
+    if not properties:
         print("Empty property file, failing")
     #storageKeyName = ecProperties['cloudlab']['keyname'] + storageRegion + ".pem"
     #useStorage = toBool(properties['usestorage'])
@@ -766,6 +775,10 @@ def collectData(propertyFile, cloudlabFile, localFolder, remoteFolder):
     print("Getting Data ")
     print(clientIpList)
     print(replicas)
+
+    clientKeyName = properties['cloudlab']['client_keyname']
+    replicaKeyName = properties['cloudlab']['replica_keyname']
+
     getDirectory(localFolder, clientIpList, remoteFolder, clientKeyName)
     getDirectory(localFolder, replicas, remoteFolder, replicaKeyName)
 

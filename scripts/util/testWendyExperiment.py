@@ -9,11 +9,14 @@
 # In its current form, there can only be one experiment run per availability# region (TODO: fix this)
 
 import wendyExperiment
+import cloudlab_util
+
+#cloudlab_util.default_context()
 
 #wendyExperiment.cleanupCloudlab('config/test.json')
 #wendyExperiment.setupCloudlab('config/test.json')
-localPath = wendyExperiment.setup('config/test.json')
-# shieldExperiment.run('config/test.json')
+#localPath = wendyExperiment.setup('config/test.json')
+wendyExperiment.run('config/test.json')
 # shieldExperiment.cleanup('config/test.json')
 #shieldExperiment.calculateParallel('config/test.json', localPath)
 #dataFile = localPath + "/results.dat"

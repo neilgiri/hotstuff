@@ -12,7 +12,7 @@
   "client_type": "shield",
   "clientmain": "hotstuffclient",
   "clients": [
-    "128.110.153.23"
+    "128.110.153.26"
   ],
   "cloudlab": {
     "client_ami": "ami-802e1ae5",
@@ -43,10 +43,13 @@
   "db_in_memory": "true",
   "exp_dir": "default",
   "exp_length": "90",
+  "experiment_dir": "experiments",
   "experimentname": "testExperiment6",
   "expiration": "960",
   "finalise_batch_buffer_t": "10",
   "gc_activated": "false",
+  "gocommandclient": "hotstuffclient",
+  "gocommandreplica": "hotstuffserver",
   "jar": "shield-1.0-SNAPSHOT.jar",
   "javacommandclient": "java -ea -XX:+UseConcMarkSweepGC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime",
   "javacommandclientlarge": "java -ea -Xss515m -Xms4g -Xmx6g -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:+PrintGCDetails -XX:+PrintGCTimeStamps",
@@ -56,7 +59,7 @@
   "key_size": "16",
   "kv_name": "kvstore",
   "loadermain": "shield.benchmarks.ycsb.StartYCSBLoader",
-  "localprojectdir": "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experiment",
+  "localprojectdir": "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff",
   "localsrcdir": "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff",
   "log_folder": "logs",
   "max_nb_stride": "10",
@@ -91,15 +94,15 @@
   "ramp_up": "15",
   "read_ratio": "50",
   "remote_store_ip_address": "100.0.0.1",
-  "remoteprojectdir": "/users/giridhn/hotstuff/experiments",
+  "remoteprojectdir": "/users/giridhn/hotstuff",
   "replica_ip_address": "100.0.0.1",
   "replica_machines": "4",
   "replicamain": "hotstuffserver",
   "replicas": [
-    "128.110.153.48",
-    "128.110.153.24",
-    "128.110.153.20",
-    "128.110.153.45"
+    "128.110.153.28",
+    "128.110.153.39",
+    "128.110.153.31",
+    "128.110.153.27"
   ],
   "run_name": "trx.dat",
   "storagemain": "shield.benchmark.utils.StartDataStore",

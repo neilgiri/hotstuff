@@ -3,7 +3,7 @@ proto_src := client/client.proto internal/proto/hotstuff/hotstuff.proto internal
 proto_go := $(proto_src:%.proto=%.pb.go)
 gorums_go := $(proto_src:%.proto=%_gorums.pb.go)
 
-binaries := cmd/hotstuffclient/hotstuffclient cmd/hotstuffserver/hotstuffserver cmd/hotstuffkeygen/hotstuffkeygen
+binaries := cmd/hotstuffclient/hotstuffclient cmd/hotstuffserver/hotstuffserver cmd/hotstuffkeygen/hotstuffkeygen cmd/wendyecclient/wendyecclient cmd/wendyecserver/wendyecserver cmd/wendyeckeygen/wendyeckeygen
 
 .PHONY: all debug protos download tools $(binaries)
 

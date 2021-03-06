@@ -208,6 +208,28 @@ def sendFileHosts(local_file, hosts, remote_dir, key=None, port=22):
                   " " + local_file + " " + h + ":" + remote_dir
         executeCommand(cmd)
 
+# Sends directory to remote host
+def sendDirectory(local_dir, h, remote_dir, key=None, port=22):
+    if not key:
+        cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no  -r " + \
+              local_dir + " " + h + ":" + remote_dir
+    else:
+        cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
+              " -r " + local_dir + " " + h + ":" + remote_dir
+    executeCommand(cmd)
+
+
+# Sends directory to list of remote hosts
+def sendDirectoryHosts(local_dir, hosts, remote_dir, key=None, port=22):
+    for h in hosts:
+        if not key:
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -r " + \
+                  local_dir + " " + h + ":" + remote_dir
+        else:
+            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
+                  " -r " + local_dir + " " + h + ":" + remote_dir
+        executeCommand(cmd)
+
 
 # Executes command on remote host
 def executeRemoteCommand(host, command, key=None, flags="", port=22):
@@ -256,8 +278,8 @@ def executeParallelBlockingRemoteCommand(hosts, command, key=None, port=22):
                   key + " " + h + " '" + command + "'"
         t = threading.Thread(target=executeCommand, args=(cmd,))
         thread_list.append(t)
-        for t in thread_list:
-            t.start()
+    for t in thread_list:
+        t.start()
     for t in thread_list:
         t.join()
 

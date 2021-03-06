@@ -133,7 +133,7 @@ func main() {
 		}
 	}
 
-	client, err := newHotStuffClient(&conf, replicaConfig)
+	client, err := newWendyECClient(&conf, replicaConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start client: %v\n", err)
 		os.Exit(1)
@@ -213,7 +213,7 @@ func (q *qspec) ExecCommandQF(_ *client.Command, signatures map[uint32]*client.E
 	return &client.Empty{}, true
 }
 
-type hotstuffClient struct {
+type wendyecClient struct {
 	inflight      uint64
 	reader        io.ReadCloser
 	conf          *options
@@ -225,7 +225,7 @@ type hotstuffClient struct {
 	data          *client.BenchmarkData // stores time and duration for each command
 }
 
-func newHotStuffClient(conf *options, replicaConfig *config.ReplicaConfig) (*hotstuffClient, error) {
+func newWendyECClient(conf *options, replicaConfig *config.ReplicaConfig) (*wendyecClient, error) {
 	nodes := make(map[string]uint32, len(replicaConfig.Replicas))
 	for _, r := range replicaConfig.Replicas {
 		nodes[r.Address] = uint32(r.ID)
@@ -262,7 +262,7 @@ func newHotStuffClient(conf *options, replicaConfig *config.ReplicaConfig) (*hot
 		}
 		reader = f
 	}
-	return &hotstuffClient{
+	return &wendyecClient{
 		reader:        reader,
 		conf:          conf,
 		mgr:           mgr,
@@ -272,16 +272,16 @@ func newHotStuffClient(conf *options, replicaConfig *config.ReplicaConfig) (*hot
 	}, nil
 }
 
-func (c *hotstuffClient) Close() {
+func (c *wendyecClient) Close() {
 	c.mgr.Close()
 	c.reader.Close()
 }
 
-func (c *hotstuffClient) GetStats() *benchmark.Result {
+func (c *wendyecClient) GetStats() *benchmark.Result {
 	return c.stats.GetResult()
 }
 
-func (c *hotstuffClient) SendCommands(ctx context.Context) error {
+func (c *wendyecClient) SendCommands(ctx context.Context) error {
 	var num uint64
 	var sleeptime time.Duration
 	if c.conf.RateLimit > 0 {

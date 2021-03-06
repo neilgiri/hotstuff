@@ -36,7 +36,7 @@ sys.path.append("util/")
 proxyKeyword = "proxy"
 storageKeyword = "storage"
 clientKeyword = "client"
-nbRepetitions = 3
+nbRepetitions = 1
 
 
 def setupConfigForCloudlab(propFile, cloudlabFile):
@@ -58,6 +58,7 @@ def setupCloudlab(cloudlabFile):
     if not clProperties:
         print("Empty property file, failing")
         return
+    user = clProperties['username']
     replicaDiskImg = clProperties['cloudlab']['replica_disk_img']
     clientDiskImg = clProperties['cloudlab']['client_disk_img']
     #storageAmi = ecProperties['ec2']['storage_ami']
@@ -100,17 +101,17 @@ def setupCloudlab(cloudlabFile):
     #startEc2Instance(proxyConn, proxyAmi, proxyKey, proxyInstType, [proxySec], proxyAvailability, tag, spot=useSpot)
     
     request = {}
-    r = cl.startInstance(nbClients, clientDiskImg, clientInstType, 0)
+    r, link = cl.startInstance(nbClients, clientDiskImg, clientInstType, 0)
     
     print("Added client machines to request")
     # Wait until finished initialising
 
     print("Creating VMs for nb of replica machines")
     if replicaRegion == clientRegion:
-        r = cl.startInstance(nbReplicas, replicaDiskImg, replicaInstType, nbClients, r)
+        r, link = cl.startInstance(nbReplicas, replicaDiskImg, replicaInstType, nbClients, r, link)
         request[replicaRegion] = r
     else:
-        r1 = cl.startInstance(nbReplicas, replicaDiskImg, replicaInstType, nbClients)
+        r1, link = cl.startInstance(nbReplicas, replicaDiskImg, replicaInstType, nbClients)
         request[replicaRegion] = r1
         request[clientRegion] = r
 
@@ -153,6 +154,9 @@ def setupCloudlab(cloudlabFile):
     with open(cloudlabFile, 'w') as fp:
         json.dump(clProperties, fp, indent=2, sort_keys=True)
 
+    #installPackages([user + "@" + r for r in clProperties['replicas']], ["golang-go"], replicaKeyName)
+    #installPackages([user + "@" + c for c in clProperties['clients']], ["golang-go"], clientKeyName)
+
 
 # if method called, terminate VMs
 def cleanupCloudlab(cloudlabFile, contextFile='/tmp/context.json', cred_file='/Users/neilgiridharan/.bssw/geni/emulab-ch2-giridhn-usercred.xml'):
@@ -170,7 +174,7 @@ def cleanupCloudlab(cloudlabFile, contextFile='/tmp/context.json', cred_file='/U
     #clientKey = getOrCreateKey(clientConn, clientKeyName)
     #storageConn = startConnection(storageRegion)
     #storageKey = getOrCreateKey(storageConn, storageKeyName)
-    executeCommand("rm " + cred_file)
+    #executeCommand("rm " + cred_file)
     experimentName = clProperties['name']
     replicaRegion = clProperties['cloudlab']['replica_region']
     clientRegion = clProperties['cloudlab']['client_region']
@@ -227,6 +231,7 @@ def setup(propertyFile):
     localSrcDir = properties['localsrcdir']
     clientCmdDir = localSrcDir + "/cmd/hotstuffclient"
     replicaCmdDir = localSrcDir + "/cmd/hotstuffserver"
+    keygen = localSrcDir + "/" + properties['gokeygen']
     expFolder = 'results/' + experimentName
     expDir = expFolder + "/" + datetime.datetime.now().strftime("%Y:%m:%d:%H:%M") + "/"
     #storageKeyName = ecProperties['cloudlab']['keyname'] + storageRegion + ".pem"
@@ -260,26 +265,42 @@ def setup(propertyFile):
     # print "Using Proxy " + str(useProxy)
     # print "Using Storage " + str(useStorage)
     # print "Using Loader " + str(useLoader)
+    #sendDirectoryHosts(localProjectDir, [user + "@" + r for r in replica_ip_addresses], properties['remotedirprefix'])
+    #sendDirectoryHosts(localProjectDir, [user + "@" + c for c in properties['clients']], properties['remotedirprefix'])
+
 
     # Compile Go Executables
     print("Setup: Compiling Executables")
+    
+
 
     currentDir = os.getcwd()
     #executeCommand(" cd " + localSrcDir)
     #executeCommand("cd " + localSrcDir + " ; mvn install")
     #executeCommand("cd " + localSrcDir + " ; mvn package")
-    executeCommand("cd " + localSrcDir + " ; make all")
-    print(localSrcDir + "/" + replicaMainClass)
+    executeParallelBlockingRemoteCommand([user + "@" + r for r in replica_ip_addresses], "cd " + remoteProjectDir + " ; make all")
+    time.sleep(40)
+    executeParallelBlockingRemoteCommand([user + "@" + c for c in properties['clients']], "cd " + remoteProjectDir + " ; make all")
+    time.sleep(40)
+    print(remoteProjectDir + "/" + replicaMainClass)
 
-    fileExists = os.path.isfile(clientCmdDir + "/" + clientMainClass)
-    if (not fileExists):
-        print("Error: Incorrect Client executable")
-        exit()
+    #fileExists = os.path.isfile(clientCmdDir + "/" + clientMainClass)
+    #if (not fileExists):
+    #    print("Error: Incorrect Client executable")
+    #    exit()
 
-    fileExists = os.path.isfile(replicaCmdDir + "/" + replicaMainClass)
-    if (not fileExists):
-        print("Error: Incorrect Replica executable")
-        exit()
+    #fileExists = os.path.isfile(replicaCmdDir + "/" + replicaMainClass)
+    #if (not fileExists):
+    #    print("Error: Incorrect Replica executable")
+    #    exit()
+    print("Generating the keys")
+    replicaHostIps = ""
+    for r in properties['replicas']:
+        replicaHostIps = r + ", "
+    replicaHostIps = replicaHostIps[:-2]
+    executeCommand(keygen + "-p 'r*' -n " + str(len(properties['replicas'])) + " --hosts " + replicaHostIps + " --tls keys")
+    sendDirectoryHosts(localSrcDir + "/keys", properties['replicas'], remoteProjectDir)
+    sendDirectoryHosts(localSrcDir + "/keys", properties['clients'], remoteProjectDir)
 
 
 #### GENERATING EXP DIRECTORY ON ALL MACHINES ####
@@ -318,16 +339,19 @@ def setup(propertyFile):
     print(replicaIpList)
     # print(useStorage)
     #sendFileHosts(j, clientIpList, remotePath, clientKeyName)
-    sendFileHosts(clientExec, [user + "@" + c for c in clientIpList], remotePath, clientKeyName)
-    sendFileHosts(replicaExec, [user + "@" + r for r in replicaIpList], remotePath, replicaKeyName)
+    #sendFileHosts(clientExec, [user + "@" + c for c in clientIpList], remotePath, clientKeyName)
+    #sendFileHosts(replicaExec, [user + "@" + r for r in replicaIpList], remotePath, replicaKeyName)
     # if (useProxy):
     #sendFileHosts(j, [proxy], remotePath, proxyKeyName)
     # if (useStorage):
     #sendFileHosts(j, [storage], remotePath, storageKeyName)
-    executeCommand("cp " + clientExec + " " + localPath)
-    executeCommand("cp " + replicaExec + " " + localPath)
+    #executeCommand("cp " + clientExec + " " + localPath)
+    #executeCommand("cp " + replicaExec + " " + localPath)
 
     # Create file with git hash
+    #executeParallelBlockingRemoteCommand([user + "@" + r for r in replica_ip_addresses], "cp " + propertyFile + " " + remotePath)
+    #executeParallelBlockingRemoteCommand([user + "@" + c for c in properties['clients']], "cp " + propertyFile + " " + remotePath)
+
     executeCommand("cp " + propertyFile + " " + localPath)
     gitHash = getGitHash(localSrcDir).decode("utf-8")
     print("Saving Git Hash " + gitHash)
@@ -354,8 +378,8 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
     #useProxy = toBool(properties['useproxy'])
     #useLoader = toBool(properties['useloader'])
     #jarName = properties['jar']
-    clientMainClass = properties['clientmain']
-    replicaMainClass = properties['replicamain']
+    #clientMainClass = properties['clientmain']
+    #replicaMainClass = properties['replicamain']
     # if (useProxy):
     #    proxyMainClass = properties['proxymain']
     # if (useLoader):
@@ -442,6 +466,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
 
     first = True
     dataLoaded = False
+    nbRounds = 1
     for i in range(0, nbRounds):
         time.sleep(10)
         for it in range(0, nbRepetitions):
@@ -470,8 +495,8 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     mkdirRemote(username + "@" + c, remotePath, clientKey)
                     mkdirRemote(username + "@" + c, logFolder, clientKey)
                 for r in replicaIpList:
-                    mkdirRemote(username + "@" + c, remotePath, replicaKey)
-                    mkdirRemote(username + "@" + c, logFolder, replicaKey)
+                    mkdirRemote(username + "@" + r, remotePath, replicaKey)
+                    mkdirRemote(username + "@" + r, logFolder, replicaKey)
 
                 # if (useProxy):
                     #mkdirRemote(proxy, remotePath, proxyKey)
@@ -536,7 +561,8 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     #    str(sid) + ".log 2>" + remotePath + \
                     #    "/proxy_err" + str(sid) + ".og"
 
-                    cmd = "cd " + remoteExpDir + " ; " + goCommandReplica + " 1> " + \
+                    id = sid - nbClients
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandReplica + " --self-id " + str(id) + " --privkey keys/r" + str(id) + ".key --batch-size 1 --print-throughput=true 1> " + \
                         remotePath + "/replica_" + replica + "_" + \
                         str(sid) + ".log"
                     sid += 1
@@ -604,7 +630,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     # cmd = "cd " + remoteExpDir + "; " + javaCommandClient + " -cp " + jarName + " " + clientMainClass + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
-                    cmd = "cd " + remoteExpDir + " ; " + goCommandClient + " 1>" + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --self-id 1 --max-inflight 1 --rate-limit 0 --payload-size 0 --exit-after 30 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
                     t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
@@ -707,7 +733,7 @@ def cleanup(propertyFile, cloudlabFile="cloudlab.json"):
         try:
             print("Killing " + str(c))
             executeRemoteCommandNoCheck(
-                c, "ps -ef | grep hotstuffclient | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                c, "ps -ef | grep hotstuffclient | awk '{print $2}' | xargs -r kill -9", clientKeyName)
         except Exception as e:
             print(" ")
 
@@ -715,7 +741,7 @@ def cleanup(propertyFile, cloudlabFile="cloudlab.json"):
         try:
             print("Killing " + str(c))
             executeRemoteCommandNoCheck(
-                c, "ps -ef | grep hotstuffserver | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                c, "ps -ef | grep hotstuffserver | awk '{print $2}' | xargs -r kill -9", replicaKeyName)
         except Exception as e:
             print(" ")
 

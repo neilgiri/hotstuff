@@ -24,6 +24,78 @@ func init() {
 	logger = logging.GetLogger()
 }
 
+// AggMessage type
+type AggMessage struct {
+	c string
+	v string
+}
+
+// KeyAggMessagePair type
+type KeyAggMessagePair struct {
+	pk []bls.PublicKey
+	m  AggMessage
+}
+
+// AggregateSignature type
+type AggregateSignature struct {
+}
+
+// SignShare verifies a partial signature
+func (AS *AggregateSignature) SignShare(sk []bls.SecretKey, m AggMessage) bls.Sign {
+	sigs := make([]bls.Sign, len(sk))
+	i := 0
+	var signature bls.Sign
+	for j, b := range m.c {
+		bit := int(b - '0')
+		if bit == 1 {
+			sigs[i] = *sk[j].Sign(m.v)
+			i++
+		}
+	}
+
+	signature.Aggregate(sigs)
+	return signature
+}
+
+// VerifyShare verifies a partial signature
+func (AS *AggregateSignature) VerifyShare(pk []bls.PublicKey, m AggMessage, sig bls.Sign) bool {
+	publicKeys := make([]bls.PublicKey, len(pk))
+	i := 0
+	for j, b := range m.c {
+		bit := int(b - '0')
+		if bit == 1 {
+			publicKeys[i] = pk[j]
+			i++
+		}
+	}
+	return sig.FastAggregateVerify(publicKeys, []byte(m.v))
+}
+
+// Agg aggregates signatures
+func (AS *AggregateSignature) Agg(sigs []bls.Sign) bls.Sign {
+	var agg bls.Sign
+	agg.Aggregate(sigs)
+	return agg
+}
+
+// VerifyAgg aggregates signatures
+func (AS *AggregateSignature) VerifyAgg(keyMessagePairs []KeyAggMessagePair, sig bls.Sign) bool {
+	i := 0
+	firstPair := keyMessagePairs[0]
+	publicKeys := make([]bls.PublicKey, len(keyMessagePairs)*len(firstPair.pk))
+
+	for _, pair := range keyMessagePairs {
+		for j, b := range pair.m.c {
+			bit := int(b - '0')
+			if bit == 1 {
+				publicKeys[i] = pair.pk[j]
+				i++
+			}
+		}
+	}
+	return sig.FastAggregateVerify(publicKeys, []byte(firstPair.m.v))
+}
+
 // SignatureCache keeps a cache of verified signatures in order to speed up verification
 type SignatureCache struct {
 	conf               *config.ReplicaConfig

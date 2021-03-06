@@ -26,10 +26,11 @@ agg = {
     'pg-utah': pg.UTAH_PG,
 }
 
-def startInstance(nb, diskImg, instType, index, r = None):
+def startInstance(nb, diskImg, instType, index, r = None, link=None):
     if r is None:
         r = rspec.Request()
-
+        link = rspec.LAN("lan")
+    
     for i in range(nb):
         node = rspec.RawPC("node" + str(i + index + 1))
         node.disk_image = diskImg
@@ -37,15 +38,17 @@ def startInstance(nb, diskImg, instType, index, r = None):
         iface = node.addInterface("if" + str(index + i + 1))
 
         # Specify the component id and the IPv4 address
-        iface.component_id = "eth1"
+        iface.component_id = "eth" + str(i + index + 1)
         iface.addAddress(rspec.IPv4Address(
             "192.168.1." + str(index + i + 1), "255.255.255.0"))
-        link = rspec.LAN("lan")
+       
         link.addInterface(iface)
+        node.addService(rspec.Install(url="https://github.com/neilgiri/hotstuff/archive/master.tar.gz", path="/users/giridhn"))
+        node.addService(rspec.Execute(shell="bash", command="sudo tar -C /users/giridhn -xvzf /users/giridhn/hotstuff-master.tar.gz ; sudo apt-get update ; sudo apt-get install --yes golang-go"))
 
         r.addResource(node)
     
-    return r
+    return r, link
 
 
 def default_context(cloudlab_user=None, cloudlab_password=None, cloudlab_project=None, cloudlab_cert_path=None, cloudlab_key_path=None):

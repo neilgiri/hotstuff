@@ -12,7 +12,7 @@
   "client_type": "shield",
   "clientmain": "hotstuffclient",
   "clients": [
-    "128.110.153.26"
+    "128.110.153.59"
   ],
   "cloudlab": {
     "client_ami": "ami-802e1ae5",
@@ -44,12 +44,13 @@
   "exp_dir": "default",
   "exp_length": "90",
   "experiment_dir": "experiments",
-  "experimentname": "testExperiment6",
+  "experimentname": "testExperiment12",
   "expiration": "960",
   "finalise_batch_buffer_t": "10",
   "gc_activated": "false",
-  "gocommandclient": "hotstuffclient",
-  "gocommandreplica": "hotstuffserver",
+  "gocommandclient": "cmd/hotstuffclient/hotstuffclient",
+  "gocommandreplica": "cmd/hotstuffserver/hotstuffserver",
+  "gokeygen": "cmd/hotstuffkeygen/hotstuffkeygen",
   "jar": "shield-1.0-SNAPSHOT.jar",
   "javacommandclient": "java -ea -XX:+UseConcMarkSweepGC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime",
   "javacommandclientlarge": "java -ea -Xss515m -Xms4g -Xmx6g -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:+PrintGCDetails -XX:+PrintGCTimeStamps",
@@ -68,7 +69,7 @@
   "n_receiver_net_threads": "1",
   "n_sender_net_threads": "1",
   "n_worker_threads": "16",
-  "name": "testExperiment6",
+  "name": "testExperiment12",
   "nb_client_threads": "1",
   "nb_keys": "1000",
   "nb_loader_threads": "1",
@@ -77,7 +78,14 @@
   "nbclients": [
     "1",
     "2",
-    "3"
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
   ],
   "oram_a": "8",
   "oram_batch_size": "0",
@@ -94,15 +102,16 @@
   "ramp_up": "15",
   "read_ratio": "50",
   "remote_store_ip_address": "100.0.0.1",
-  "remoteprojectdir": "/users/giridhn/hotstuff",
+  "remotedirprefix": "/users/giridhn",
+  "remoteprojectdir": "/users/giridhn/hotstuff-master",
   "replica_ip_address": "100.0.0.1",
   "replica_machines": "4",
   "replicamain": "hotstuffserver",
   "replicas": [
-    "128.110.153.28",
-    "128.110.153.39",
-    "128.110.153.31",
-    "128.110.153.27"
+    "128.110.153.46",
+    "128.110.153.20",
+    "128.110.153.42",
+    "128.110.153.29"
   ],
   "run_name": "trx.dat",
   "storagemain": "shield.benchmark.utils.StartDataStore",

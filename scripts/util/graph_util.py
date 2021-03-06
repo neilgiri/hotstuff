@@ -54,11 +54,15 @@ def plotLine(title, x_axis, y_axis, save, data, points, legend='upper left', xle
         fig, ax = plt.subplots()
 
         mark = ['-o', '-v', '-^', '-D', '-x', '-D']
+        
 
         i = 0
+        print("Made it")
         for tup in data:
+            print("Made it")
             data_path = tup[0]
             data = np.atleast_2d(np.loadtxt(data_path))
+            print("Made it")
             lab = tup[1]
             x = tup[2]
             y = tup[3]
@@ -70,7 +74,7 @@ def plotLine(title, x_axis, y_axis, save, data, points, legend='upper left', xle
             else:
                 plt.plot(data[:, x], data[:, y], '-', linewidth=2, label=lab)
             i = i + 1
-
+        print("Made it")
     # Output graphs
 
         print("Outputting graphs")
@@ -103,7 +107,7 @@ def plotLine(title, x_axis, y_axis, save, data, points, legend='upper left', xle
         frame = leg.get_frame()
         frame.set_linewidth(0)
         frame.set_fill(None)
-        # plt.title(title)
+        #plt.title(title)
         saveGraph(save)
         plt.close()
     except Exception as e:

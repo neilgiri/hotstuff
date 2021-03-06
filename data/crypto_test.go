@@ -157,49 +157,50 @@ func TestProof(t *testing.T) {
 	bls.SetETHmode(bls.EthModeDraft07)
 	fmt.Printf("Testing Proof of no commit\n")
 
-	numReplicas := int(4)
+	fmt.Printf("Generating Public/Private Key Pairs\n")
+	numKeys := 5
+	numReplicas := 4
+
+	secretKeys := make([][]bls.SecretKey, numReplicas)
 	publicKeys := make([][]bls.PublicKey, numReplicas)
-	signatures := make([][]bls.Sign, numReplicas)
-	multisignatures := make([]bls.Sign, numReplicas)
-	bitVectors := make([]string, numReplicas)
+	signatures := make([]bls.Sign, numReplicas)
+	keyAggMessagePairs := make([]KeyAggMessagePair, numReplicas)
 
-	commonView := int(6)
-	n := int64(5)
-	bitString := strconv.FormatInt(n, 2)
-
-	// Construct no-commit proof
 	for i := 0; i < numReplicas; i++ {
-		bitVectors[i] = bitString
-		signatures[i] = make([]bls.Sign, len(bitVectors[i]))
-		publicKeys[i] = make([]bls.PublicKey, len(bitVectors[i]))
-		for j := 0; j < len(bitVectors[i]); j++ {
-			if bitString[j] == 49 {
-				var sec bls.SecretKey
-				sec.SetByCSPRNG()
-				pub := sec.GetPublicKey()
-				publicKeys[i][j] = *pub
-				sig := sec.Sign(strconv.Itoa(commonView))
-				signatures[i][j] = *sig
-			}
+		secretKeys[i] = make([]bls.SecretKey, numKeys)
+		publicKeys[i] = make([]bls.PublicKey, numKeys)
+		for j := 0; j < numKeys; j++ {
+			var sk bls.SecretKey
+			sk.SetByCSPRNG()
+			secretKeys[i][j] = sk
+			publicKeys[i][j] = *sk.GetPublicKey()
 		}
-		var aggSig bls.Sign
-		aggSig.Aggregate(signatures[i])
-		multisignatures[i] = aggSig
 	}
 
-	// Primary verifying signatures and constructing no-commit proof
-	for i := 0; i < len(multisignatures); i++ {
-		//bv := bitVectors[i]
-		// Verify using replica i's public keys the validity of the multisig on common view
-		aggSig := multisignatures[i]
-		commonViewBytes := []byte(strconv.Itoa(commonView))
-		t.Error(aggSig.FastAggregateVerify(publicKeys[i], commonViewBytes))
+	var AS AggregateSignature
+
+	view := "110"
+	messages := make([]AggMessage, numReplicas)
+	for i := 0; i < numReplicas; i++ {
+		cI := strconv.FormatInt(int64(i+1), 2)
+		messages[i] = AggMessage{c: cI, v: view}
+		signatures[i] = AS.SignShare(secretKeys[i], messages[i])
 	}
 
-	/*msg := []byte("abc")
-	pub := sec.GetPublicKey()
-	sig := sec.SignByte(msg)
-	fmt.Printf("verify=%v\n", sig.VerifyByte(pub, msg))*/
+	for i := 0; i < numReplicas; i++ {
+		if !AS.VerifyShare(publicKeys[i], messages[i], signatures[i]) {
+			t.Error("AS.VerifyShare failed")
+		}
+	}
+
+	aggSig := AS.Agg(signatures)
+	for i := 0; i < numReplicas; i++ {
+		keyAggMessagePairs[i] = KeyAggMessagePair{pk: publicKeys[i], m: messages[i]}
+	}
+
+	if !AS.VerifyAgg(keyAggMessagePairs, aggSig) {
+		t.Error("AS.VerifyAgg failed")
+	}
 }
 
 func BenchmarkNoCommitProof(b *testing.B) {

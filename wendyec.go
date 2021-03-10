@@ -18,7 +18,7 @@ import (
 	"github.com/relab/hotstuff/consensus"
 	"github.com/relab/hotstuff/data"
 	"github.com/relab/hotstuff/internal/logging"
-	proto "github.com/relab/hotstuff/internal/proto/hotstuff"
+	proto "github.com/relab/hotstuff/internal/proto/wendyec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -54,7 +54,7 @@ type WendyEC struct {
 }
 
 //NewWendyEC creates a new GorumsHotStuff backend object.
-func NewWendyEC(conf *config.ReplicaConfig, pacemaker PacemakerWendyEC, tls bool, connectTimeout, qcTimeout time.Duration) *WendyEC {
+func NewWendyEC(conf *config.ReplicaConfigWendy, pacemaker PacemakerWendyEC, tls bool, connectTimeout, qcTimeout time.Duration) *WendyEC {
 	wendyEC := &WendyEC{
 		pacemaker:      pacemaker,
 		WendyCoreEC:    consensus.NewWendyEC(conf),
@@ -160,7 +160,7 @@ func (wendyEC *WendyEC) startServer(port string) error {
 	serverOpts = append(serverOpts, proto.WithGRPCServerOptions(grpcServerOpts...))
 
 	wendyEC.server = newWendyECServer(wendyEC, proto.NewGorumsServer(serverOpts...))
-	wendyEC.server.RegisterHotstuffServer(wendyEC.server)
+	wendyEC.server.RegisterWendyECServer(wendyEC.server)
 
 	go wendyEC.server.Serve(lis)
 	return nil
@@ -189,17 +189,30 @@ func (wendyEC *WendyEC) Propose() {
 func (wendyEC *WendyEC) SendNewView(id config.ReplicaID) {
 	qc := wendyEC.GetQCHigh()
 	if node, ok := wendyEC.nodes[id]; ok {
-		node.NewView(proto.QuorumCertToProto(qc))
+		//node.NewView(proto.QuorumCertToProto(qc))
+		block, _ := wendyEC.WendyCoreEC.Blocks.BlockOf(qc)
+		vD := strconv.FormatInt(int64(block.Height), 2)
+		v := strconv.FormatInt(int64(wendyEC.WendyCoreEC.GetHeight()), 2)
+		msg := data.AggMessage{C: vD, V: v}
+		var AS data.AggregateSignature
+		sig := AS.SignShare(wendyEC.WendyCoreEC.Config.ProofPrivKeys, msg)
+		newViewMsg := data.NewViewMsg{LockCertificate: qc, Message: msg, Signature: sig}
+		node.NewView(proto.NewViewMsgToProto(newViewMsg))
 	}
 }
 
 func (wendyEC *WendyEC) handlePropose(block *data.Block) {
-	p, err := wendyEC.OnReceiveProposal(block)
+	p, nack, err := wendyEC.OnReceiveProposal(block)
+	leaderID := wendyEC.pacemaker.GetLeader(block.Height)
 	if err != nil {
 		logger.Println("OnReceiveProposal returned with error:", err)
+		if nack != nil {
+			leader := wendyEC.nodes[leaderID]
+			leader.Nack(proto.NackMsgToProto(*nack))
+		}
 		return
 	}
-	leaderID := wendyEC.pacemaker.GetLeader(block.Height)
+
 	if wendyEC.Config.ID == leaderID {
 		wendyEC.OnReceiveVote(p)
 	} else if leader, ok := wendyEC.nodes[leaderID]; ok {
@@ -310,7 +323,37 @@ func (wendyEC *wendyecServer) Vote(ctx context.Context, cert *proto.PartialCert)
 }
 
 // NewView handles the leader's response to receiving a NewView rpc from a replica
-func (wendyEC *wendyecServer) NewView(ctx context.Context, msg *proto.QuorumCert) {
-	qc := msg.FromProto()
-	wendyEC.OnReceiveNewView(qc)
+func (wendyEC *wendyecServer) NewView(ctx context.Context, msg *proto.NewViewMsg) {
+	newViewMsg := msg.FromProto()
+	wendyEC.OnReceiveNewView(&newViewMsg)
+}
+
+// Nack handles the leader's response to receiving a Nack rpc from a replica
+func (wendyEC *wendyecServer) Nack(ctx context.Context, nackMsg *proto.NackMsg) {
+	nack := nackMsg.FromProto()
+	proof := wendyEC.OnReceiveNack(&nack)
+
+	md, _ := metadata.FromIncomingContext(ctx)
+	v := md.Get("id")
+	id, _ := strconv.Atoi(v[0])
+
+	if node, ok := wendyEC.nodes[config.ReplicaID(id)]; ok {
+		node.ProofNoCommit(proto.ProofNCToProto(proof))
+	}
+}
+
+// ProofNoCommit handles the replica's response to receiving a ProofNC rpc from a leader
+func (wendyEC *wendyecServer) ProofNoCommit(ctx context.Context, proof *proto.ProofNC) {
+	proofNC := proof.FromProto()
+	pc, err := wendyEC.OnReceiveProofNC(&proofNC)
+
+	md, _ := metadata.FromIncomingContext(ctx)
+	v := md.Get("id")
+	id, _ := strconv.Atoi(v[0])
+
+	if err == nil {
+		if node, ok := wendyEC.nodes[config.ReplicaID(id)]; ok {
+			node.Vote(proto.PartialCertToProto(pc))
+		}
+	}
 }

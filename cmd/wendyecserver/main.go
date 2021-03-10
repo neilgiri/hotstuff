@@ -204,7 +204,7 @@ func main() {
 
 	var clientAddress string
 
-	replicaConfig := config.NewConfig(conf.SelfID, privkey, cert)
+	replicaConfig := config.NewConfigWendy(conf.SelfID, privkey, cert)
 	replicaConfig.BatchSize = conf.BatchSize
 	for _, r := range conf.Replicas {
 		key, err := data.ReadPublicKeyFile(r.Pubkey)
@@ -224,7 +224,7 @@ func main() {
 			}
 		}
 
-		info := &config.ReplicaInfo{
+		info := &config.ReplicaInfoWendy{
 			ID:      r.ID,
 			Address: r.PeerAddr,
 			PubKey:  key,
@@ -292,7 +292,7 @@ type wendyecServer struct {
 	lastExecTime int64
 }
 
-func newWendyECServer(conf *options, replicaConfig *config.ReplicaConfig) *wendyecServer {
+func newWendyECServer(conf *options, replicaConfig *config.ReplicaConfigWendy) *wendyecServer {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	serverOpts := []client.ServerOption{}

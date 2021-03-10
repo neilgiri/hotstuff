@@ -426,18 +426,19 @@ type WendyCoreEC struct {
 
 	// Contains the commands that are waiting to be proposed
 	cmdCache *data.CommandSet
-	Config   *config.ReplicaConfig
+	Config   *config.ReplicaConfigWendy
 	Blocks   data.BlockStorage
-	SigCache *data.SignatureCache
+	SigCache *data.SignatureCacheWendy
 
 	// protocol data
-	vHeight    int
-	genesis    *data.Block
-	bLock      *data.Block
-	bExec      *data.Block
-	bLeaf      *data.Block
-	qcHigh     *data.QuorumCert
-	pendingQCs map[data.BlockHash]*data.QuorumCert
+	vHeight        int
+	genesis        *data.Block
+	bLock          *data.Block
+	bExec          *data.Block
+	bLeaf          *data.Block
+	qcHigh         *data.QuorumCert
+	pendingQCs     map[data.BlockHash]*data.QuorumCert
+	viewChangeMsgs map[string][]data.NewViewMsg
 
 	waitProposal *sync.Cond
 
@@ -500,7 +501,7 @@ func (wendyEC *WendyCoreEC) GetExec() chan []data.Command {
 }
 
 // NewWendyEC creates a new Hotstuff instance
-func NewWendyEC(conf *config.ReplicaConfig) *WendyCoreEC {
+func NewWendyEC(conf *config.ReplicaConfigWendy) *WendyCoreEC {
 	logger.SetPrefix(fmt.Sprintf("wendyec(id %d): ", conf.ID))
 	genesis := &data.Block{
 		Committed: true,
@@ -520,8 +521,9 @@ func NewWendyEC(conf *config.ReplicaConfig) *WendyCoreEC {
 		qcHigh:         qcForGenesis,
 		Blocks:         blocks,
 		pendingQCs:     make(map[data.BlockHash]*data.QuorumCert),
+		viewChangeMsgs: make(map[string][]data.NewViewMsg),
 		cancel:         cancel,
-		SigCache:       data.NewSignatureCache(conf),
+		SigCache:       data.NewSignatureCacheWendy(conf),
 		cmdCache:       data.NewCommandSet(),
 		pendingUpdates: make(chan *data.Block, 1),
 		exec:           make(chan []data.Command, 1),
@@ -582,7 +584,7 @@ func (wendyEC *WendyCoreEC) UpdateQCHigh(qc *data.QuorumCert) bool {
 }
 
 // OnReceiveProposal handles a replica's response to the Proposal from the leader
-func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialCert, error) {
+func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialCert, *data.NackMsg, error) {
 	logger.Println("OnReceiveProposal:", block)
 	wendyEC.Blocks.Put(block)
 
@@ -592,7 +594,7 @@ func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialC
 	if block.Height <= wendyEC.vHeight {
 		wendyEC.mut.Unlock()
 		logger.Println("OnReceiveProposal: Block height less than vHeight")
-		return nil, fmt.Errorf("Block was not accepted")
+		return nil, nil, fmt.Errorf("Block was not accepted")
 	}
 
 	safe := false
@@ -616,7 +618,7 @@ func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialC
 	if !safe {
 		wendyEC.mut.Unlock()
 		logger.Println("OnReceiveProposal: Block not safe")
-		return nil, fmt.Errorf("Block was not accepted")
+		return nil, &data.NackMsg{HighLockCertificate: wendyEC.GetQCHigh(), Hash: block.Hash()}, fmt.Errorf("Block was not accepted")
 	}
 
 	logger.Println("OnReceiveProposal: Accepted block")
@@ -632,9 +634,9 @@ func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialC
 
 	pc, err := wendyEC.SigCache.CreatePartialCert(wendyEC.Config.ID, wendyEC.Config.PrivateKey, block)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return pc, nil
+	return pc, nil, nil
 }
 
 // OnReceiveVote handles an incoming vote from a replica
@@ -694,12 +696,75 @@ func (wendyEC *WendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 }
 
 // OnReceiveNewView handles the leader's response to receiving a NewView rpc from a replica
-func (wendyEC *WendyCoreEC) OnReceiveNewView(qc *data.QuorumCert) {
+func (wendyEC *WendyCoreEC) OnReceiveNewView(newViewMsg *data.NewViewMsg) {
 	wendyEC.mut.Lock()
 	defer wendyEC.mut.Unlock()
 	logger.Println("OnReceiveNewView")
-	wendyEC.emitEvent(Event{Type: ReceiveNewView, QC: qc})
-	wendyEC.UpdateQCHigh(qc)
+	wendyEC.emitEvent(Event{Type: ReceiveNewView, QC: newViewMsg.LockCertificate})
+	wendyEC.UpdateQCHigh(newViewMsg.LockCertificate)
+
+	if _, ok := wendyEC.viewChangeMsgs[newViewMsg.Message.V]; ok {
+		wendyEC.viewChangeMsgs[newViewMsg.Message.V][newViewMsg.ID] = *newViewMsg
+	} else {
+		wendyEC.viewChangeMsgs[newViewMsg.Message.V] = make([]data.NewViewMsg, len(wendyEC.Config.Replicas))
+	}
+}
+
+// OnReceiveNack handles the leader's response to receiving a Nack rpc from a replica
+func (wendyEC *WendyCoreEC) OnReceiveNack(nackMsg *data.NackMsg) data.ProofNC {
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+	logger.Println("OnReceiveNack")
+
+	targetView := strconv.FormatInt(int64(wendyEC.GetHeight()), 2)
+
+	var AS data.AggregateSignature
+	msgs := wendyEC.viewChangeMsgs[targetView]
+	numEntries := len(msgs)
+
+	sigs := make([]bls.Sign, numEntries)
+	for i := 0; i < numEntries; i++ {
+		sigs[i] = msgs[i].Signature
+	}
+
+	aggSig := AS.Agg(sigs)
+
+	pairs := make([]data.KeyAggMessagePair, numEntries)
+	for i := 0; i < numEntries; i++ {
+		pairs[i] = data.KeyAggMessagePair{PK: wendyEC.Config.Replicas[msgs[i].ID].ProofPubKeys, M: msgs[i].Message}
+	}
+
+	proof := data.ProofNC{Messages: pairs, Signature: aggSig, Hash: nackMsg.Hash}
+	return proof
+}
+
+// OnReceiveProofNC handles the replica's response to receiving a ProofNC rpc from a replica
+func (wendyEC *WendyCoreEC) OnReceiveProofNC(proof *data.ProofNC) (*data.PartialCert, error) {
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+	logger.Println("OnReceiveProofNC")
+
+	var AS data.AggregateSignature
+	block, _ := wendyEC.expectBlock(proof.Hash)
+	if AS.VerifyAgg(proof.Messages, proof.Signature) {
+		logger.Println("OnReceiveProofNC: Accepted block")
+		wendyEC.vHeight = block.Height
+		wendyEC.cmdCache.MarkProposed(block.Commands...)
+		wendyEC.mut.Unlock()
+
+		wendyEC.waitProposal.Broadcast()
+		wendyEC.emitEvent(Event{Type: ReceiveProposal, Block: block, Replica: block.Proposer})
+
+		// queue block for update
+		wendyEC.pendingUpdates <- block
+
+		pc, err := wendyEC.SigCache.CreatePartialCert(wendyEC.Config.ID, wendyEC.Config.PrivateKey, block)
+		if err != nil {
+			return nil, err
+		}
+		return pc, nil
+	}
+	return nil, nil
 }
 
 func (wendyEC *WendyCoreEC) updateAsync(ctx context.Context) {

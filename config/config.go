@@ -18,6 +18,14 @@ type ReplicaInfo struct {
 	PubKey  *ecdsa.PublicKey
 }
 
+// ReplicaInfoWendy holds information about a replica
+type ReplicaInfoWendy struct {
+	ID           ReplicaID
+	Address      string
+	PubKey       *ecdsa.PublicKey
+	ProofPubKeys []bls.PublicKey
+}
+
 // ReplicaInfoBls holds information about a replica
 type ReplicaInfoBls struct {
 	ID             ReplicaID
@@ -38,6 +46,18 @@ type ReplicaConfig struct {
 	BatchSize  int
 }
 
+// ReplicaConfigWendy holds information needed by a replica
+type ReplicaConfigWendy struct {
+	ID            ReplicaID
+	PrivateKey    *ecdsa.PrivateKey
+	ProofPrivKeys []bls.SecretKey
+	Cert          *tls.Certificate // Own certificate
+	CertPool      *x509.CertPool   // Other replicas's certificates
+	Replicas      map[ReplicaID]*ReplicaInfoWendy
+	QuorumSize    int
+	BatchSize     int
+}
+
 // ReplicaConfigBls holds information needed by a replica
 type ReplicaConfigBls struct {
 	ID              ReplicaID
@@ -52,7 +72,7 @@ type ReplicaConfigBls struct {
 	ProofNCPrivKeys []bls.SecretKey
 }
 
-// ReplicaConfigBls holds information needed by a replica
+// ReplicaConfigFastWendy holds information needed by a replica
 type ReplicaConfigFastWendy struct {
 	ID              ReplicaID
 	PrivateKey      *bls.SecretKey
@@ -75,6 +95,18 @@ func NewConfig(id ReplicaID, privateKey *ecdsa.PrivateKey, cert *tls.Certificate
 		Cert:       cert,
 		CertPool:   x509.NewCertPool(),
 		Replicas:   make(map[ReplicaID]*ReplicaInfo),
+		BatchSize:  1,
+	}
+}
+
+// NewConfigWendy returns a new ReplicaConfig instance
+func NewConfigWendy(id ReplicaID, privateKey *ecdsa.PrivateKey, cert *tls.Certificate) *ReplicaConfigWendy {
+	return &ReplicaConfigWendy{
+		ID:         id,
+		PrivateKey: privateKey,
+		Cert:       cert,
+		CertPool:   x509.NewCertPool(),
+		Replicas:   make(map[ReplicaID]*ReplicaInfoWendy),
 		BatchSize:  1,
 	}
 }

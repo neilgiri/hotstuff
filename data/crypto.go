@@ -26,14 +26,35 @@ func init() {
 
 // AggMessage type
 type AggMessage struct {
-	c string
-	v string
+	C string
+	V string
 }
 
 // KeyAggMessagePair type
 type KeyAggMessagePair struct {
-	pk []bls.PublicKey
-	m  AggMessage
+	PK []bls.PublicKey
+	M  AggMessage
+}
+
+// NewViewMsg type
+type NewViewMsg struct {
+	LockCertificate *QuorumCert
+	Message         AggMessage
+	Signature       bls.Sign
+	ID              config.ReplicaID
+}
+
+// ProofNC type
+type ProofNC struct {
+	Messages  []KeyAggMessagePair
+	Signature bls.Sign
+	Hash      BlockHash
+}
+
+// NackMsg type
+type NackMsg struct {
+	HighLockCertificate *QuorumCert
+	Hash                BlockHash
 }
 
 // AggregateSignature type
@@ -45,10 +66,10 @@ func (AS *AggregateSignature) SignShare(sk []bls.SecretKey, m AggMessage) bls.Si
 	sigs := make([]bls.Sign, len(sk))
 	i := 0
 	var signature bls.Sign
-	for j, b := range m.c {
+	for j, b := range m.C {
 		bit := int(b - '0')
 		if bit == 1 {
-			sigs[i] = *sk[j].Sign(m.v)
+			sigs[i] = *sk[j].Sign(m.V)
 			i++
 		}
 	}
@@ -61,14 +82,14 @@ func (AS *AggregateSignature) SignShare(sk []bls.SecretKey, m AggMessage) bls.Si
 func (AS *AggregateSignature) VerifyShare(pk []bls.PublicKey, m AggMessage, sig bls.Sign) bool {
 	publicKeys := make([]bls.PublicKey, len(pk))
 	i := 0
-	for j, b := range m.c {
+	for j, b := range m.C {
 		bit := int(b - '0')
 		if bit == 1 {
 			publicKeys[i] = pk[j]
 			i++
 		}
 	}
-	return sig.FastAggregateVerify(publicKeys, []byte(m.v))
+	return sig.FastAggregateVerify(publicKeys, []byte(m.V))
 }
 
 // Agg aggregates signatures
@@ -82,23 +103,31 @@ func (AS *AggregateSignature) Agg(sigs []bls.Sign) bls.Sign {
 func (AS *AggregateSignature) VerifyAgg(keyMessagePairs []KeyAggMessagePair, sig bls.Sign) bool {
 	i := 0
 	firstPair := keyMessagePairs[0]
-	publicKeys := make([]bls.PublicKey, len(keyMessagePairs)*len(firstPair.pk))
+	publicKeys := make([]bls.PublicKey, len(keyMessagePairs)*len(firstPair.PK))
 
 	for _, pair := range keyMessagePairs {
-		for j, b := range pair.m.c {
+		for j, b := range pair.M.C {
 			bit := int(b - '0')
 			if bit == 1 {
-				publicKeys[i] = pair.pk[j]
+				publicKeys[i] = pair.PK[j]
 				i++
 			}
 		}
 	}
-	return sig.FastAggregateVerify(publicKeys, []byte(firstPair.m.v))
+	return sig.FastAggregateVerify(publicKeys, []byte(firstPair.M.V))
 }
 
 // SignatureCache keeps a cache of verified signatures in order to speed up verification
 type SignatureCache struct {
 	conf               *config.ReplicaConfig
+	verifiedSignatures map[string]bool
+	cache              list.List
+	mut                sync.Mutex
+}
+
+// SignatureCacheWendy keeps a cache of verified signatures in order to speed up verification
+type SignatureCacheWendy struct {
+	conf               *config.ReplicaConfigWendy
 	verifiedSignatures map[string]bool
 	cache              list.List
 	mut                sync.Mutex
@@ -123,6 +152,14 @@ type SignatureCacheFastWendy struct {
 // NewSignatureCache returns a new instance of SignatureVerifier
 func NewSignatureCache(conf *config.ReplicaConfig) *SignatureCache {
 	return &SignatureCache{
+		conf:               conf,
+		verifiedSignatures: make(map[string]bool),
+	}
+}
+
+// NewSignatureCacheWendy returns a new instance of SignatureVerifier
+func NewSignatureCacheWendy(conf *config.ReplicaConfigWendy) *SignatureCacheWendy {
+	return &SignatureCacheWendy{
 		conf:               conf,
 		verifiedSignatures: make(map[string]bool),
 	}
@@ -160,6 +197,22 @@ func (s *SignatureCache) CreatePartialCert(id config.ReplicaID, privKey *ecdsa.P
 	return &PartialCert{sig, hash}, nil
 }
 
+// CreatePartialCert creates a partial cert from a block.
+func (s *SignatureCacheWendy) CreatePartialCert(id config.ReplicaID, privKey *ecdsa.PrivateKey, block *Block) (*PartialCert, error) {
+	hash := block.Hash()
+	R, S, err := ecdsa.Sign(rand.Reader, privKey, hash[:])
+	if err != nil {
+		return nil, err
+	}
+	sig := PartialSig{id, R, S}
+	k := string(sig.ToBytes())
+	s.mut.Lock()
+	s.verifiedSignatures[k] = true
+	s.cache.PushBack(k)
+	s.mut.Unlock()
+	return &PartialCert{sig, hash}, nil
+}
+
 // CreatePartialCertBls creates a partial cert from a block.
 func (s *SignatureCacheBls) CreatePartialCertBls(id config.ReplicaID, privKey *bls.SecretKey, block *BlockBls) (*PartialCertBls, error) {
 	hash := block.Hash()
@@ -176,6 +229,31 @@ func (s *SignatureCacheBls) CreatePartialCertBls(id config.ReplicaID, privKey *b
 
 // VerifySignature verifies a partial signature
 func (s *SignatureCache) VerifySignature(sig PartialSig, hash BlockHash) bool {
+	k := string(sig.ToBytes())
+
+	s.mut.Lock()
+	if valid, ok := s.verifiedSignatures[k]; ok {
+		s.mut.Unlock()
+		return valid
+	}
+	s.mut.Unlock()
+
+	info, ok := s.conf.Replicas[sig.ID]
+	if !ok {
+		return false
+	}
+	valid := ecdsa.Verify(info.PubKey, hash[:], sig.R, sig.S)
+
+	s.mut.Lock()
+	s.cache.PushBack(k)
+	s.verifiedSignatures[k] = valid
+	s.mut.Unlock()
+
+	return valid
+}
+
+// VerifySignature verifies a partial signature
+func (s *SignatureCacheWendy) VerifySignature(sig PartialSig, hash BlockHash) bool {
 	k := string(sig.ToBytes())
 
 	s.mut.Lock()
@@ -244,6 +322,26 @@ func (s *SignatureCache) VerifyQuorumCert(qc *QuorumCert) bool {
 	return numVerified >= uint64(s.conf.QuorumSize)
 }
 
+// VerifyQuorumCert verifies a quorum certificate
+func (s *SignatureCacheWendy) VerifyQuorumCert(qc *QuorumCert) bool {
+	if len(qc.Sigs) < s.conf.QuorumSize {
+		return false
+	}
+	var wg sync.WaitGroup
+	var numVerified uint64 = 0
+	for _, psig := range qc.Sigs {
+		wg.Add(1)
+		go func(psig PartialSig) {
+			if s.VerifySignature(psig, qc.BlockHash) {
+				atomic.AddUint64(&numVerified, 1)
+			}
+			wg.Done()
+		}(psig)
+	}
+	wg.Wait()
+	return numVerified >= uint64(s.conf.QuorumSize)
+}
+
 // VerifyQuorumCertBls verifies a quorum certificate
 func (s *SignatureCacheBls) VerifyQuorumCertBls(qc *QuorumCertBls) bool {
 	if len(qc.I) < s.conf.QuorumSize {
@@ -263,6 +361,17 @@ func (s *SignatureCacheBls) VerifyQuorumCertBls(qc *QuorumCertBls) bool {
 
 // EvictOld reduces the size of the cache by removing the oldest cached results
 func (s *SignatureCache) EvictOld(size int) {
+	s.mut.Lock()
+	for length := s.cache.Len(); length > size; length-- {
+		el := s.cache.Front()
+		k := s.cache.Remove(el).(string)
+		delete(s.verifiedSignatures, k)
+	}
+	s.mut.Unlock()
+}
+
+// EvictOld reduces the size of the cache by removing the oldest cached results
+func (s *SignatureCacheWendy) EvictOld(size int) {
 	s.mut.Lock()
 	for length := s.cache.Len(); length > size; length-- {
 		el := s.cache.Front()

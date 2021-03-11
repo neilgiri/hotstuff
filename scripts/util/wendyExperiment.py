@@ -295,12 +295,14 @@ def setup(propertyFile):
     #    exit()
     print("Generating the keys")
     replicaHostIps = ""
+    #print(properties['replicas'])
     for r in properties['replicas']:
-        replicaHostIps = r + ", "
-    replicaHostIps = replicaHostIps[:-2]
-    executeCommand(keygen + "-p 'r*' -n " + str(len(properties['replicas'])) + " --hosts " + replicaHostIps + " --tls keys")
-    sendDirectoryHosts(localSrcDir + "/keys", properties['replicas'], remoteProjectDir)
-    sendDirectoryHosts(localSrcDir + "/keys", properties['clients'], remoteProjectDir)
+        #print(r)
+        replicaHostIps = replicaHostIps + r + ","
+    replicaHostIps = replicaHostIps[:-1]
+    executeCommand(keygen + " -p 'r*' -n " + str(len(properties['replicas'])) + " --hosts " + replicaHostIps + " --tls keys")
+    sendDirectoryHosts(localSrcDir + "/keys", [user + "@" + r for r in properties['replicas']], remoteProjectDir)
+    sendDirectoryHosts(localSrcDir + "/keys", [user + "@" + c for c in properties['clients']], remoteProjectDir)
 
 
 #### GENERATING EXP DIRECTORY ON ALL MACHINES ####
@@ -466,7 +468,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
 
     first = True
     dataLoaded = False
-    nbRounds = 1
+    #nbRounds = 1
     for i in range(0, nbRounds):
         time.sleep(10)
         for it in range(0, nbRepetitions):
@@ -630,7 +632,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     # cmd = "cd " + remoteExpDir + "; " + javaCommandClient + " -cp " + jarName + " " + clientMainClass + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --self-id 1 --max-inflight 1 --rate-limit 0 --payload-size 0 --exit-after 30 1>" + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight 1 --rate-limit 0 --payload-size 0 --exit-after 30 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
                     t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
@@ -653,14 +655,14 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 for c in clientIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + c, "ps -ef | grep hotstuffclient | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                            username + "@" + c, "ps -ef | grep wendyecclient | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
                     except Exception as e:
                         print(" ")
 
                 for r in replicaIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + r, "ps -ef | grep hotstuffserver | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                            username + "@" + r, "ps -ef | grep wendyecserver | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
                     except Exception as e:
                         print(" ")
 
@@ -733,7 +735,7 @@ def cleanup(propertyFile, cloudlabFile="cloudlab.json"):
         try:
             print("Killing " + str(c))
             executeRemoteCommandNoCheck(
-                c, "ps -ef | grep hotstuffclient | awk '{print $2}' | xargs -r kill -9", clientKeyName)
+                c, "ps -ef | grep wendyecclient | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
         except Exception as e:
             print(" ")
 
@@ -741,7 +743,7 @@ def cleanup(propertyFile, cloudlabFile="cloudlab.json"):
         try:
             print("Killing " + str(c))
             executeRemoteCommandNoCheck(
-                c, "ps -ef | grep hotstuffserver | awk '{print $2}' | xargs -r kill -9", replicaKeyName)
+                c, "ps -ef | grep wendyecserver | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
         except Exception as e:
             print(" ")
 
@@ -787,15 +789,16 @@ def collectData(propertyFile, cloudlabFile, localFolder, remoteFolder):
     #storageKeyName = ecProperties['cloudlab']['keyname'] + storageRegion + ".pem"
     #useStorage = toBool(properties['usestorage'])
     #useProxy = toBool(properties['useproxy'])
+    user = properties['username']
 
     clientIpList = list()
     replicas = list()
 
     for c in properties['clients']:
-        clientIpList.append(c)
+        clientIpList.append(user + "@" + c)
 
     for r in properties['replicas']:
-        replicas.append(r)
+        replicas.append(user + "@" + r)
     #proxy = properties['proxy_ip_address']
     #storage = properties['remote_store_ip_address']
     print("Getting Data ")

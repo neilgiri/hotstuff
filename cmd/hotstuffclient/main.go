@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -176,7 +175,13 @@ func main() {
 		)
 		fmt.Println(stats.TotalOps)
 	} else {
-		client.data.MeasuredThroughput = throughput
+		commandStats := client.data.Stats
+		for i := 0; i < len(commandStats); i++ {
+			latency := float64(commandStats[i].Duration.GetNanos())
+			commandLatency := latency / 1000000.0
+			fmt.Printf("%.4f %.4f %.4f\n", commandLatency, commandLatency, commandLatency)
+		}
+		/*client.data.MeasuredThroughput = throughput
 		client.data.MeasuredLatency = latency
 		client.data.LatencyVariance = math.Pow(latencySD, 2) // variance in ms^2
 		b, err := proto.Marshal(client.data)
@@ -186,7 +191,7 @@ func main() {
 		_, err = os.Stdout.Write(b)
 		if err != nil {
 			log.Fatalf("Could not write data: %v\n", err)
-		}
+		}*/
 	}
 
 	if *memprofile != "" {

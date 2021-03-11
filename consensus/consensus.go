@@ -1618,37 +1618,20 @@ func (wendyEC *FastWendyCoreEC) updateAsync(ctx context.Context) {
 
 func (wendyEC *FastWendyCoreEC) update(block *data.Block) {
 	// block1 = b'', block2 = b', block3 = b
-	block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
-	if !ok || block1.Committed {
-		return
-	}
 
 	wendyEC.mut.Lock()
 	defer wendyEC.mut.Unlock()
 
-	// Lock on block1
-	logger.Println("LOCK:", block1)
-	// Lock on block1
+	block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
 	wendyEC.UpdateQCHigh(block.Justify)
-
 	if !ok || block1.Committed {
 		return
 	}
 
-	if block1.Height > wendyEC.bLock.Height {
-		wendyEC.bLock = block1 // Lock on block1
-		logger.Println("LOCK:", block1)
-	}
-
-	block2, ok := wendyEC.Blocks.BlockOf(block1.Justify)
-	if !ok || block2.Committed {
-		return
-	}
-
-	if block.ParentHash == block1.Hash() && block1.ParentHash == block2.Hash() {
-		logger.Println("DECIDE", block2)
-		wendyEC.commit(block2)
-		wendyEC.bExec = block2 // DECIDE on block2
+	if block.ParentHash == block1.Hash() {
+		logger.Println("DECIDE", block1)
+		wendyEC.commit(block1)
+		wendyEC.bExec = block1 // DECIDE on block2
 	}
 
 	// Free up space by deleting old data

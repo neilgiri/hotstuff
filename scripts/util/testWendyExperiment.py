@@ -15,8 +15,8 @@ import cloudlab_util
 
 #wendyExperiment.cleanupCloudlab('config/test.json')
 #wendyExperiment.setupCloudlab('config/test.json')
-localPath = wendyExperiment.setup('config/test.json')
-#wendyExperiment.run('config/test.json')
+#localPath = wendyExperiment.setup('config/test.json')
+wendyExperiment.run('config/test.json')
 # shieldExperiment.cleanup('config/test.json')
 #shieldExperiment.calculateParallel('config/test.json', localPath)
 #dataFile = localPath + "/results.dat"

@@ -12,7 +12,7 @@
   "client_type": "shield",
   "clientmain": "hotstuffclient",
   "clients": [
-    "128.110.153.20"
+    "128.110.152.133"
   ],
   "cloudlab": {
     "client_ami": "ami-802e1ae5",
@@ -44,13 +44,13 @@
   "exp_dir": "default",
   "exp_length": "90",
   "experiment_dir": "experiments",
-  "experimentname": "testExperiment12",
+  "experimentname": "testExperiment14",
   "expiration": "960",
   "finalise_batch_buffer_t": "10",
   "gc_activated": "false",
-  "gocommandclient": "cmd/hotstuffclient/hotstuffclient",
-  "gocommandreplica": "cmd/hotstuffserver/hotstuffserver",
-  "gokeygen": "cmd/hotstuffkeygen/hotstuffkeygen",
+  "gocommandclient": "cmd/wendyecclient/wendyecclient",
+  "gocommandreplica": "cmd/wendyecserver/wendyecserver",
+  "gokeygen": "cmd/wendyeckeygen/wendyeckeygen",
   "jar": "shield-1.0-SNAPSHOT.jar",
   "javacommandclient": "java -ea -XX:+UseConcMarkSweepGC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime",
   "javacommandclientlarge": "java -ea -Xss515m -Xms4g -Xmx6g -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:+PrintGCDetails -XX:+PrintGCTimeStamps",
@@ -69,7 +69,7 @@
   "n_receiver_net_threads": "1",
   "n_sender_net_threads": "1",
   "n_worker_threads": "16",
-  "name": "testExperiment12",
+  "name": "testExperiment14",
   "nb_client_threads": "1",
   "nb_keys": "1000",
   "nb_loader_threads": "1",
@@ -108,10 +108,10 @@
   "replica_machines": "4",
   "replicamain": "hotstuffserver",
   "replicas": [
-    "128.110.153.49",
-    "128.110.153.26",
-    "128.110.153.46",
-    "128.110.153.32"
+    "128.110.152.129",
+    "128.110.152.114",
+    "128.110.152.120",
+    "128.110.152.96"
   ],
   "run_name": "trx.dat",
   "storagemain": "shield.benchmark.utils.StartDataStore",

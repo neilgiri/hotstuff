@@ -1,10 +1,10 @@
 proto_include := $(shell go list -m -f {{.Dir}} github.com/relab/gorums)
-proto_src := client/client.proto internal/proto/hotstuff/hotstuff.proto internal/proto/wendy/wendy.proto internal/proto/wendyec/wendyec.proto
+proto_src := client/client.proto internal/proto/hotstuff/hotstuff.proto internal/proto/wendy/wendy.proto internal/proto/wendyec/wendyec.proto internal/proto/fastwendyec/fastwendyec.proto
 
 proto_go := $(proto_src:%.proto=%.pb.go)
 gorums_go := $(proto_src:%.proto=%_gorums.pb.go)
 
-binaries := cmd/hotstuffclient/hotstuffclient cmd/hotstuffserver/hotstuffserver cmd/hotstuffkeygen/hotstuffkeygen cmd/wendyecclient/wendyecclient cmd/wendyecserver/wendyecserver cmd/wendyeckeygen/wendyeckeygen
+binaries := cmd/hotstuffclient/hotstuffclient cmd/hotstuffserver/hotstuffserver cmd/hotstuffkeygen/hotstuffkeygen cmd/wendyecclient/wendyecclient cmd/wendyecserver/wendyecserver cmd/wendyeckeygen/wendyeckeygen cmd/fastwendyecclient/fastwendyecclient cmd/fastwendyecserver/fastwendyecserver cmd/fastwendyeckeygen/fastwendyeckeygen
 
 .PHONY: all debug protos download tools $(binaries)
 

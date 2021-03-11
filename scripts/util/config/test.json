@@ -12,7 +12,7 @@
   "client_type": "shield",
   "clientmain": "hotstuffclient",
   "clients": [
-    "128.110.153.59"
+    "128.110.153.20"
   ],
   "cloudlab": {
     "client_ami": "ami-802e1ae5",
@@ -108,10 +108,10 @@
   "replica_machines": "4",
   "replicamain": "hotstuffserver",
   "replicas": [
+    "128.110.153.49",
+    "128.110.153.26",
     "128.110.153.46",
-    "128.110.153.20",
-    "128.110.153.42",
-    "128.110.153.29"
+    "128.110.153.32"
   ],
   "run_name": "trx.dat",
   "storagemain": "shield.benchmark.utils.StartDataStore",

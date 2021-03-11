@@ -176,6 +176,12 @@ func main() {
 		)
 		fmt.Println(stats.TotalOps)
 	} else {
+		commandStats := client.data.Stats
+		for i := 0; i < len(commandStats); i++ {
+			latency := float64(commandStats[i].Duration.GetNanos())
+			commandLatency := latency / 1000000.0
+			fmt.Printf("%.4f %.4f %.4f\n", commandLatency, commandLatency, commandLatency)
+		}
 		client.data.MeasuredThroughput = throughput
 		client.data.MeasuredLatency = latency
 		client.data.LatencyVariance = math.Pow(latencySD, 2) // variance in ms^2

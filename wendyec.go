@@ -190,9 +190,8 @@ func (wendyEC *WendyEC) SendNewView(id config.ReplicaID) {
 	qc := wendyEC.GetQCHigh()
 	if node, ok := wendyEC.nodes[id]; ok {
 		//node.NewView(proto.QuorumCertToProto(qc))
-		block, _ := wendyEC.WendyCoreEC.Blocks.BlockOf(qc)
-		vD := strconv.FormatInt(int64(block.Height), 2)
 		v := strconv.FormatInt(int64(wendyEC.WendyCoreEC.GetHeight()), 2)
+		vD := strconv.FormatInt(int64(wendyEC.WendyCoreEC.GetHeight()-wendyEC.WendyCoreEC.GetLock().Height), 2)
 		msg := data.AggMessage{C: vD, V: v}
 		var AS data.AggregateSignature
 		sig := AS.SignShare(wendyEC.WendyCoreEC.Config.ProofPrivKeys, msg)

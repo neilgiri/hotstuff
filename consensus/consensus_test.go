@@ -82,26 +82,12 @@ func TestUpdateQCHigh(t *testing.T) {
 	}
 }
 
-func TestUpdateQCHighWendy(t *testing.T) {
-	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
-	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+func TestUpdateQCHighWendyEC(t *testing.T) {
+	key, _ := GeneratePrivateKey()
+	wendy := NewWendyEC(NewConfigWendy(1, key, nil))
+	block1 := CreateLeaf(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
 	wendy.Blocks.Put(block1)
-	qc1 := CreateQuorumCertBls(block1)
-	//cert1 := CreateQuorumCertificateBls(block1, wendy.Config.N)
-	/*var secretKey bls.SecretKey
-	var secretKey1 bls.SecretKey
-	sig := secretKey.Sign("123")
-	sig1 := secretKey.Sign("123")
-
-	pk := secretKey.GetPublicKey()
-	pk1 := secretKey1.GetPublicKey()*/
-	/*cert1.Sigs[1] = *sig
-	cert1.Sigs[2] = *sig1
-	cert1.PublicKeys[0] = *pk
-	cert1.PublicKeys[1] = *pk1
-
-	qc1 := CreateQuorumCertBls(block1.Hash(), cert1)*/
+	qc1 := CreateQuorumCert(block1)
 
 	if wendy.UpdateQCHigh(qc1) {
 		if wendy.bLeaf.Hash() != block1.Hash() {
@@ -115,15 +101,9 @@ func TestUpdateQCHighWendy(t *testing.T) {
 		t.Error("UpdateQCHigh failed to complete")
 	}
 
-	block2 := CreateLeafBls(block1, []Command{Command("command2")}, qc1, block1.Height+1)
+	block2 := CreateLeaf(block1, []Command{Command("command2")}, qc1, block1.Height+1)
 	wendy.Blocks.Put(block2)
-	//cert2 := CreateQuorumCertificateBls(block2, wendy.Config.N)
-
-	/*cert2.Sigs[1] = *sig
-	cert2.Sigs[2] = *sig1
-	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1*/
-	qc2 := CreateQuorumCertBls(block2)
+	qc2 := CreateQuorumCert(block2)
 	wendy.UpdateQCHigh(qc2)
 
 	if wendy.UpdateQCHigh(qc1) {
@@ -184,51 +164,18 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
-func TestUpdateWendy(t *testing.T) {
-	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
+func TestUpdateWendyEC(t *testing.T) {
+	key, _ := GeneratePrivateKey()
+	wendy := NewWendyEC(NewConfigWendy(1, key, nil))
 	wendy.Config.QuorumSize = 0 // this accepts all QCs
 
-	n1 := CreateLeafBls(wendy.genesis, []Command{Command("n1")}, wendy.qcHigh, wendy.genesis.Height+1)
+	n1 := CreateLeaf(wendy.genesis, []Command{Command("n1")}, wendy.qcHigh, wendy.genesis.Height+1)
 	wendy.Blocks.Put(n1)
-	/*var secretKey bls.SecretKey
-	var secretKey1 bls.SecretKey
-	sig := secretKey.Sign("123")
-	sig1 := secretKey.Sign("123")
-
-	pk := secretKey.GetPublicKey()
-	pk1 := secretKey1.GetPublicKey()
-	cert2 := CreateQuorumCertificateBls(n1, wendy.Config.N)
-
-	cert2.Sigs[1] = *sig
-	cert2.Sigs[2] = *sig1
-	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1*/
-	qc1 := CreateQuorumCertBls(n1)
-	n2 := CreateLeafBls(n1, []Command{Command("n2")}, qc1, n1.Height+1)
+	n2 := CreateLeaf(n1, []Command{Command("n2")}, CreateQuorumCert(n1), n1.Height+1)
 	wendy.Blocks.Put(n2)
-	/*cert3 := CreateQuorumCertificateBls(n2, wendy.Config.N)
-
-	cert3.Sigs[1] = *sig
-	cert3.Sigs[2] = *sig1
-	cert3.PublicKeys[0] = *pk
-	cert3.PublicKeys[1] = *pk1*/
-
-	qc2 := CreateQuorumCertBls(n2)
-
-	n3 := CreateLeafBls(n2, []Command{Command("n3")}, qc2, n2.Height+1)
+	n3 := CreateLeaf(n2, []Command{Command("n3")}, CreateQuorumCert(n2), n2.Height+1)
 	wendy.Blocks.Put(n3)
-
-	/*cert4 := CreateQuorumCertificateBls(n3, wendy.Config.N)
-
-	cert4.Sigs[1] = *sig
-	cert4.Sigs[2] = *sig1
-	cert4.PublicKeys[0] = *pk
-	cert4.PublicKeys[1] = *pk1*/
-
-	qc3 := CreateQuorumCertBls(n3)
-
-	n4 := CreateLeafBls(n3, []Command{Command("n4")}, qc3, n3.Height+1)
+	n4 := CreateLeaf(n3, []Command{Command("n4")}, CreateQuorumCert(n3), n3.Height+1)
 	wendy.Blocks.Put(n4)
 
 	// Prepare on n1
@@ -241,13 +188,13 @@ func TestUpdateWendy(t *testing.T) {
 		t.Error("Lock failed")
 	}
 
+	// Decide on n1, Lock on n2, Prepare on n3
+	wendy.update(n3)
 	// check that bLock got updated
-	if wendy.bLock != n1 {
-		t.Error("COMMIT failed")
+	if wendy.bLock != n2 {
+		t.Error("Lock failed")
 	}
 
-	// DECIDE on n1, Lock on n2, Prepare on n3
-	wendy.update(n3)
 	// check that bExec got updated and n1 got executed
 	success := true
 	if wendy.bExec != n1 {
@@ -257,6 +204,26 @@ func TestUpdateWendy(t *testing.T) {
 	select {
 	case b := <-wendy.GetExec():
 		if b[0] != n1.Commands[0] {
+			success = false
+		}
+	case <-time.After(time.Second):
+		success = false
+	}
+
+	if !success {
+		t.Error("DECIDE failed")
+	}
+
+	// DECIDE on n2, Lock on n3, Prepare on n4
+	wendy.update(n4)
+	success = true
+	if wendy.bExec != n2 {
+		success = false
+	}
+
+	select {
+	case b := <-wendy.GetExec():
+		if b[0] != n2.Commands[0] {
 			success = false
 		}
 	case <-time.After(time.Second):
@@ -304,28 +271,13 @@ func TestOnReciveProposal(t *testing.T) {
 	}
 }
 
-func TestOnReciveProposalWendy(t *testing.T) {
-	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
-	block1 := CreateLeafBls(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+func TestOnReciveProposalWendyEC(t *testing.T) {
+	key, _ := GeneratePrivateKey()
+	wendy := NewWendyEC(NewConfigWendy(1, key, nil))
+	block1 := CreateLeaf(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+	qc := CreateQuorumCert(block1)
 
-	/*var secretKey bls.SecretKey
-	var secretKey1 bls.SecretKey
-	sig := secretKey.Sign("123")
-	sig1 := secretKey.Sign("123")
-
-	pk := secretKey.GetPublicKey()
-	pk1 := secretKey1.GetPublicKey()
-	cert2 := CreateQuorumCertificateBls(block1, wendy.Config.N)
-
-	cert2.Sigs[1] = *sig
-	cert2.Sigs[2] = *sig1
-	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1*/
-
-	qc := CreateQuorumCertBls(block1)
-
-	pc, err := wendy.OnReceiveProposal(block1)
+	pc, _, err := wendy.OnReceiveProposal(block1)
 
 	if err != nil {
 		t.Errorf("onReciveProposal failed with error: %w", err)
@@ -342,10 +294,10 @@ func TestOnReciveProposalWendy(t *testing.T) {
 		}
 	}
 
-	block2 := CreateLeafBls(block1, []Command{Command("command2")}, qc, block1.Height+1)
+	block2 := CreateLeaf(block1, []Command{Command("command2")}, qc, block1.Height+1)
 
 	wendy.OnReceiveProposal(block2)
-	pc, err = wendy.OnReceiveProposal(block1)
+	pc, _, err = wendy.OnReceiveProposal(block1)
 
 	if err == nil {
 		t.Error("Block got accepted, expected rejection.")
@@ -375,26 +327,11 @@ func TestExpectBlock(t *testing.T) {
 	}
 }
 
-func TestExpectBlockWendy(t *testing.T) {
-	key := GeneratePrivateKeyBls()
-	wendy := NewWendy(NewConfigBls(1, &key, nil, nil))
-	block := CreateLeafBls(wendy.genesis, []Command{Command("test")}, wendy.qcHigh, 1)
-
-	/*var secretKey bls.SecretKey
-	var secretKey1 bls.SecretKey
-	sig := secretKey.Sign("123")
-	sig1 := secretKey.Sign("123")
-
-	pk := secretKey.GetPublicKey()
-	pk1 := secretKey1.GetPublicKey()
-	cert2 := CreateQuorumCertificateBls(block, wendy.Config.N)
-
-	cert2.Sigs[1] = *sig
-	cert2.Sigs[2] = *sig1
-	cert2.PublicKeys[0] = *pk
-	cert2.PublicKeys[1] = *pk1*/
-
-	qc := CreateQuorumCertBls(block)
+func TestExpectBlockWendyEC(t *testing.T) {
+	key, _ := GeneratePrivateKey()
+	wendy := NewWendyEC(NewConfigWendy(1, key, nil))
+	block := CreateLeaf(wendy.genesis, []Command{Command("test")}, wendy.qcHigh, 1)
+	qc := CreateQuorumCert(block)
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
@@ -408,4 +345,50 @@ func TestExpectBlockWendy(t *testing.T) {
 	if !ok && n == nil {
 		t.Fail()
 	}
+}
+
+func TestOnReciveProposalWendyECNack(t *testing.T) {
+	key, _ := GeneratePrivateKey()
+	wendy := NewWendyEC(NewConfigWendy(1, key, nil))
+	block1 := CreateLeaf(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+	block11 := CreateLeaf(wendy.genesis, []Command{Command("command11")}, wendy.qcHigh, wendy.genesis.Height+1)
+	qc := CreateQuorumCert(block1)
+	block2 := CreateLeaf(block11, []Command{Command("command2")}, qc, block11.Height+1)
+	qc2 := CreateQuorumCert(block2)
+	wendy.qcHigh = qc2
+	wendy.bLock = block2
+
+	_, nack, _ := wendy.OnReceiveProposal(block1)
+
+	if nack == nil {
+		t.Error("Block got accepted, expected rejection.")
+	}
+
+	/*if err != nil {
+		t.Errorf("onReciveProposal failed with error: %w", err)
+	}
+
+	if pc == nil {
+		t.Error("onReciveProposal failed to complete")
+	} else {
+		if _, ok := wendy.Blocks.Get(block1.Hash()); !ok {
+			t.Error("onReciveProposal failed to place the new block in BlockStorage")
+		}
+		if wendy.vHeight != block1.Height {
+			t.Error("onReciveProposal failed to update the heigt of the replica")
+		}
+	}
+
+
+
+	//wendy.OnReceiveProposal(block2)
+
+	pc, _, err = wendy.OnReceiveProposal(block2)
+
+	if err == nil {
+		t.Error("Block got accepted, expected rejection.")
+	}
+	if pc != nil {
+		t.Errorf("Expected nil got: %v", pc)
+	}*/
 }

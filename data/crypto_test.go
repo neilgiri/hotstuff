@@ -183,7 +183,7 @@ func TestProof(t *testing.T) {
 	messages := make([]AggMessage, numReplicas)
 	for i := 0; i < numReplicas; i++ {
 		cI := strconv.FormatInt(int64(i+1), 2)
-		messages[i] = AggMessage{c: cI, v: view}
+		messages[i] = AggMessage{C: cI, V: view}
 		signatures[i] = AS.SignShare(secretKeys[i], messages[i])
 	}
 
@@ -195,7 +195,7 @@ func TestProof(t *testing.T) {
 
 	aggSig := AS.Agg(signatures)
 	for i := 0; i < numReplicas; i++ {
-		keyAggMessagePairs[i] = KeyAggMessagePair{pk: publicKeys[i], m: messages[i]}
+		keyAggMessagePairs[i] = KeyAggMessagePair{PK: publicKeys[i], M: messages[i]}
 	}
 
 	if !AS.VerifyAgg(keyAggMessagePairs, aggSig) {
@@ -234,7 +234,7 @@ func BenchmarkNoCommitProof(b *testing.B) {
 	messages := make([]AggMessage, numReplicas)
 	for i := 0; i < numReplicas; i++ {
 		cI := strconv.FormatInt(int64(i+1), 2)
-		messages[i] = AggMessage{c: cI, v: view}
+		messages[i] = AggMessage{C: cI, V: view}
 		signatures[i] = AS.SignShare(secretKeys[i], messages[i])
 	}
 
@@ -246,7 +246,7 @@ func BenchmarkNoCommitProof(b *testing.B) {
 
 	aggSig := AS.Agg(signatures)
 	for i := 0; i < numReplicas; i++ {
-		keyAggMessagePairs[i] = KeyAggMessagePair{pk: publicKeys[i], m: messages[i]}
+		keyAggMessagePairs[i] = KeyAggMessagePair{PK: publicKeys[i], M: messages[i]}
 	}
 
 	for n := 0; n < b.N; n++ {

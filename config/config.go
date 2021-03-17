@@ -75,13 +75,13 @@ type ReplicaConfigBls struct {
 // ReplicaConfigFastWendy holds information needed by a replica
 type ReplicaConfigFastWendy struct {
 	ID              ReplicaID
-	PrivateKey      *bls.SecretKey
-	PrivateKeyCert  *ecdsa.PrivateKey
+	PrivateKey      *ecdsa.PrivateKey
 	Cert            *tls.Certificate // Own certificate
 	CertPool        *x509.CertPool   // Other replicas's certificates
-	Replicas        map[ReplicaID]*ReplicaInfoBls
+	Replicas        map[ReplicaID]*ReplicaInfoWendy
 	QuorumSize      int
 	FastQuorumSize  int
+	WeakLockSize    int
 	BatchSize       int
 	N               int
 	ProofNCPrivKeys []bls.SecretKey
@@ -102,6 +102,18 @@ func NewConfig(id ReplicaID, privateKey *ecdsa.PrivateKey, cert *tls.Certificate
 // NewConfigWendy returns a new ReplicaConfig instance
 func NewConfigWendy(id ReplicaID, privateKey *ecdsa.PrivateKey, cert *tls.Certificate) *ReplicaConfigWendy {
 	return &ReplicaConfigWendy{
+		ID:         id,
+		PrivateKey: privateKey,
+		Cert:       cert,
+		CertPool:   x509.NewCertPool(),
+		Replicas:   make(map[ReplicaID]*ReplicaInfoWendy),
+		BatchSize:  1,
+	}
+}
+
+// NewConfigFastWendy returns a new ReplicaConfig instance
+func NewConfigFastWendy(id ReplicaID, privateKey *ecdsa.PrivateKey, cert *tls.Certificate) *ReplicaConfigFastWendy {
+	return &ReplicaConfigFastWendy{
 		ID:         id,
 		PrivateKey: privateKey,
 		Cert:       cert,

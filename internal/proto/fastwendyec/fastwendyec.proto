@@ -35,6 +35,20 @@ message Block {
   QuorumCert QC = 2;
   int64 Height = 3;
   repeated Command Commands = 4;
+  ProofNC LockProof = 5;
+  QuorumCert HighLock = 6;
+  ProofNC WeakLockProof = 7;
+  QuorumCert HighWeakLock = 8;
+  VoteMap HighVotes = 9;
+}
+
+message VoteMap {
+  repeated VoteGroup Group = 1;
+} 
+
+message VoteGroup {
+  string Key = 1;
+  repeated PartialCert Value = 2;
 }
 
 message PartialSig {
@@ -59,10 +73,14 @@ message AggMessage {
 }
 
 message NewViewMsg {
-  QuorumCert LockCertificate = 1;
-  AggMessage Message = 2;
-  bytes Signature = 3;
-  int32 ReplicaID = 4;
+  int32 ReplicaID = 1;
+  QuorumCert LockCertificate = 2;
+  AggMessage MessageLock = 3;
+  bytes SignatureLock = 4;
+  QuorumCert WeakLockCertificate = 5;
+  AggMessage MessageWeakLock = 6;
+  bytes SignatureWeakLock = 7;
+  PartialCert Vote = 8;
 }
 
 message Command { bytes Data = 1; }

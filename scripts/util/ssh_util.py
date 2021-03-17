@@ -166,11 +166,22 @@ def getDirectory(local_dir, hosts, remote_dir, key=None, port=22):
     print(hosts)
     for h in hosts:
         if not key:
-            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -r " + \
+            cmd = "scp -r -P " + str(port) + " -o StrictHostKeyChecking=no " + \
                   h + ":" + remote_dir + " " + local_dir
         else:
-            cmd = "scp -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
-                  " -r " + h + ":" + remote_dir + " " + local_dir
+            cmd = "scp -r -P " + str(port) + " -o StrictHostKeyChecking=no -i " + key + \
+                  " " + h + ":" + remote_dir + " " + local_dir
+        executeCommand(cmd)
+
+def getDirectoryRsync(local_dir, hosts, remote_dir, key=None, port=22):
+    print(hosts)
+    for h in hosts:
+        if not key:
+            cmd = "rsync -a " + \
+                  h + ":" + remote_dir + " " + local_dir
+        else:
+            cmd = "rsync -a " + \
+                  "" + h + ":" + remote_dir + " " + local_dir
         executeCommand(cmd)
 
 

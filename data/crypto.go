@@ -44,6 +44,18 @@ type NewViewMsg struct {
 	ID              config.ReplicaID
 }
 
+// NewViewMsgFastWendy type
+type NewViewMsgFastWendy struct {
+	LockCertificate     *QuorumCert
+	Message             AggMessage
+	Signature           bls.Sign
+	ID                  config.ReplicaID
+	WeakLockCertificate *QuorumCert
+	MessageWeakLock     AggMessage
+	SignatureWeakLock   bls.Sign
+	Vote                *PartialCert
+}
+
 // ProofNC type
 type ProofNC struct {
 	Messages  []KeyAggMessagePair
@@ -213,6 +225,22 @@ func (s *SignatureCacheWendy) CreatePartialCert(id config.ReplicaID, privKey *ec
 	return &PartialCert{sig, hash}, nil
 }
 
+// CreatePartialCert creates a partial cert from a block.
+func (s *SignatureCacheFastWendy) CreatePartialCert(id config.ReplicaID, privKey *ecdsa.PrivateKey, block *BlockFastWendy) (*PartialCert, error) {
+	hash := block.Hash()
+	R, S, err := ecdsa.Sign(rand.Reader, privKey, hash[:])
+	if err != nil {
+		return nil, err
+	}
+	sig := PartialSig{id, R, S}
+	k := string(sig.ToBytes())
+	s.mut.Lock()
+	s.verifiedSignatures[k] = true
+	s.cache.PushBack(k)
+	s.mut.Unlock()
+	return &PartialCert{sig, hash}, nil
+}
+
 // CreatePartialCertBls creates a partial cert from a block.
 func (s *SignatureCacheBls) CreatePartialCertBls(id config.ReplicaID, privKey *bls.SecretKey, block *BlockBls) (*PartialCertBls, error) {
 	hash := block.Hash()
@@ -254,6 +282,31 @@ func (s *SignatureCache) VerifySignature(sig PartialSig, hash BlockHash) bool {
 
 // VerifySignature verifies a partial signature
 func (s *SignatureCacheWendy) VerifySignature(sig PartialSig, hash BlockHash) bool {
+	k := string(sig.ToBytes())
+
+	s.mut.Lock()
+	if valid, ok := s.verifiedSignatures[k]; ok {
+		s.mut.Unlock()
+		return valid
+	}
+	s.mut.Unlock()
+
+	info, ok := s.conf.Replicas[sig.ID]
+	if !ok {
+		return false
+	}
+	valid := ecdsa.Verify(info.PubKey, hash[:], sig.R, sig.S)
+
+	s.mut.Lock()
+	s.cache.PushBack(k)
+	s.verifiedSignatures[k] = valid
+	s.mut.Unlock()
+
+	return valid
+}
+
+// VerifySignature verifies a partial signature
+func (s *SignatureCacheFastWendy) VerifySignature(sig PartialSig, hash BlockHash) bool {
 	k := string(sig.ToBytes())
 
 	s.mut.Lock()
@@ -342,6 +395,26 @@ func (s *SignatureCacheWendy) VerifyQuorumCert(qc *QuorumCert) bool {
 	return numVerified >= uint64(s.conf.QuorumSize)
 }
 
+// VerifyQuorumCert verifies a quorum certificate
+func (s *SignatureCacheFastWendy) VerifyQuorumCert(qc *QuorumCert, quorumSize int) bool {
+	if len(qc.Sigs) < quorumSize {
+		return false
+	}
+	var wg sync.WaitGroup
+	var numVerified uint64 = 0
+	for _, psig := range qc.Sigs {
+		wg.Add(1)
+		go func(psig PartialSig) {
+			if s.VerifySignature(psig, qc.BlockHash) {
+				atomic.AddUint64(&numVerified, 1)
+			}
+			wg.Done()
+		}(psig)
+	}
+	wg.Wait()
+	return numVerified >= uint64(quorumSize)
+}
+
 // VerifyQuorumCertBls verifies a quorum certificate
 func (s *SignatureCacheBls) VerifyQuorumCertBls(qc *QuorumCertBls) bool {
 	if len(qc.I) < s.conf.QuorumSize {
@@ -372,6 +445,17 @@ func (s *SignatureCache) EvictOld(size int) {
 
 // EvictOld reduces the size of the cache by removing the oldest cached results
 func (s *SignatureCacheWendy) EvictOld(size int) {
+	s.mut.Lock()
+	for length := s.cache.Len(); length > size; length-- {
+		el := s.cache.Front()
+		k := s.cache.Remove(el).(string)
+		delete(s.verifiedSignatures, k)
+	}
+	s.mut.Unlock()
+}
+
+// EvictOld reduces the size of the cache by removing the oldest cached results
+func (s *SignatureCacheFastWendy) EvictOld(size int) {
 	s.mut.Lock()
 	for length := s.cache.Len(); length > size; length-- {
 		el := s.cache.Front()
@@ -428,6 +512,11 @@ func (psig PartialSigBls) ToBytes() []byte {
 type PartialCert struct {
 	Sig       PartialSig
 	BlockHash BlockHash
+}
+
+// VoteMap struct
+type VoteMap struct {
+	VoteGroup map[string][]*PartialCert
 }
 
 // PartialCertBls is a single replica's certificate for a block.
@@ -578,6 +667,11 @@ func CreateQuorumCert(block *Block) *QuorumCert {
 	return &QuorumCert{BlockHash: block.Hash(), Sigs: make(map[config.ReplicaID]PartialSig)}
 }
 
+// CreateQuorumCertFastWendy creates an empty quorum certificate for a given block
+func CreateQuorumCertFastWendy(block *BlockFastWendy) *QuorumCert {
+	return &QuorumCert{BlockHash: block.Hash(), Sigs: make(map[config.ReplicaID]PartialSig)}
+}
+
 // CreateQuorumCertBls creates an empty quorum certificate for a given block
 func CreateQuorumCertBls(block *BlockBls) *QuorumCertBls {
 	return &QuorumCertBls{BlockHash: block.Hash(), Sig: make([]bls.Sign, 0), I: make(map[config.ReplicaID]bool)}
@@ -593,6 +687,30 @@ func CreateQuorumCertGenisisFastWendy(blockHash BlockHash, configuration *config
 // VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConfig
 func VerifyQuorumCert(conf *config.ReplicaConfig, qc *QuorumCert) bool {
 	if len(qc.Sigs) < conf.QuorumSize {
+		return false
+	}
+	var wg sync.WaitGroup
+	var numVerified uint64 = 0
+	for _, psig := range qc.Sigs {
+		info, ok := conf.Replicas[psig.ID]
+		if !ok {
+			logger.Printf("VerifyQuorumSig: got signature from replica whose ID (%d) was not in config.", psig.ID)
+		}
+		wg.Add(1)
+		go func(psig PartialSig) {
+			if ecdsa.Verify(info.PubKey, qc.BlockHash[:], psig.R, psig.S) {
+				atomic.AddUint64(&numVerified, 1)
+			}
+			wg.Done()
+		}(psig)
+	}
+	wg.Wait()
+	return numVerified >= uint64(conf.QuorumSize)
+}
+
+// VerifyQuorumCertFastWendy will verify a QuorumCert from public keys stored in ReplicaConfig
+func VerifyQuorumCertFastWendy(conf *config.ReplicaConfig, qc *QuorumCert, quorumSize int) bool {
+	if len(qc.Sigs) < quorumSize {
 		return false
 	}
 	var wg sync.WaitGroup

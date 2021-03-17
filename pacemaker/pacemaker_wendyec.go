@@ -29,6 +29,7 @@ func NewFixedLeaderWendyEC(leaderID config.ReplicaID) *FixedLeaderWendyEC {
 	}
 }
 
+// Init func
 func (p *FixedLeaderWendyEC) Init(wendyEC *hotstuff.WendyEC) {
 	p.WendyEC = wendyEC
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),
@@ -38,6 +39,7 @@ func (p *FixedLeaderWendyEC) Init(wendyEC *hotstuff.WendyEC) {
 	p.notify = wendyEC.GetEvents()
 }
 
+// GetLeader func
 func (p *FixedLeaderWendyEC) GetLeader(_ int) config.ReplicaID {
 	return p.leader
 }
@@ -92,6 +94,7 @@ func NewRoundRobinWendyEC(termLength int, schedule []config.ReplicaID, timeout t
 	}
 }
 
+// Init func
 func (p *RoundRobinWendyEC) Init(wendyEC *hotstuff.WendyEC) {
 	p.WendyEC = wendyEC
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),

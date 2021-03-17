@@ -32,6 +32,7 @@ func NewFixedLeader(leaderID config.ReplicaID) *FixedLeader {
 	}
 }
 
+// Init func
 func (p *FixedLeader) Init(hs *hotstuff.HotStuff) {
 	p.HotStuff = hs
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),
@@ -41,6 +42,7 @@ func (p *FixedLeader) Init(hs *hotstuff.HotStuff) {
 	p.notify = hs.GetEvents()
 }
 
+// GetLeader func
 func (p *FixedLeader) GetLeader(_ int) config.ReplicaID {
 	return p.leader
 }
@@ -95,6 +97,7 @@ func NewRoundRobin(termLength int, schedule []config.ReplicaID, timeout time.Dur
 	}
 }
 
+// Init func
 func (p *RoundRobin) Init(hs *hotstuff.HotStuff) {
 	p.HotStuff = hs
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),

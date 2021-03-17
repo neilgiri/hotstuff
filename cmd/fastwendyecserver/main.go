@@ -204,7 +204,7 @@ func main() {
 
 	var clientAddress string
 
-	replicaConfig := config.NewConfigWendy(conf.SelfID, privkey, cert)
+	replicaConfig := config.NewConfigFastWendy(conf.SelfID, privkey, cert)
 	replicaConfig.BatchSize = conf.BatchSize
 	for _, r := range conf.Replicas {
 		key, err := data.ReadPublicKeyFile(r.Pubkey)
@@ -244,7 +244,8 @@ func main() {
 
 		replicaConfig.Replicas[r.ID] = info
 	}
-	replicaConfig.QuorumSize = len(replicaConfig.Replicas)
+	replicaConfig.QuorumSize = len(replicaConfig.Replicas) - (len(replicaConfig.Replicas)-1)/3
+	replicaConfig.FastQuorumSize = len(replicaConfig.Replicas)
 
 	srv := newFastWendyECServer(&conf, replicaConfig)
 	err = srv.Start(clientAddress)
@@ -292,7 +293,7 @@ type fastwendyecServer struct {
 	lastExecTime int64
 }
 
-func newFastWendyECServer(conf *options, replicaConfig *config.ReplicaConfigWendy) *fastwendyecServer {
+func newFastWendyECServer(conf *options, replicaConfig *config.ReplicaConfigFastWendy) *fastwendyecServer {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	serverOpts := []client.ServerOption{}

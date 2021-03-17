@@ -18,7 +18,7 @@ import (
 	"github.com/relab/hotstuff/consensus"
 	"github.com/relab/hotstuff/data"
 	"github.com/relab/hotstuff/internal/logging"
-	proto "github.com/relab/hotstuff/internal/proto/wendyec"
+	proto "github.com/relab/hotstuff/internal/proto/fastwendyec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -28,13 +28,13 @@ func init() {
 	logger = logging.GetLogger()
 }
 
-// PacemakerWendyEC is a mechanism that provides synchronization
+// PacemakerFastWendyEC is a mechanism that provides synchronization
 type PacemakerFastWendyEC interface {
 	GetLeader(view int) config.ReplicaID
 	Init(*FastWendyEC)
 }
 
-// WendyEC is a thing
+// FastWendyEC is a thing
 type FastWendyEC struct {
 	*consensus.FastWendyCoreEC
 	tls bool
@@ -53,8 +53,8 @@ type FastWendyEC struct {
 	connectTimeout time.Duration
 }
 
-//NewWendyEC creates a new GorumsHotStuff backend object.
-func NewFastWendyEC(conf *config.ReplicaConfigWendy, pacemaker PacemakerFastWendyEC, tls bool, connectTimeout, qcTimeout time.Duration) *FastWendyEC {
+//NewFastWendyEC creates a new GorumsHotStuff backend object.
+func NewFastWendyEC(conf *config.ReplicaConfigFastWendy, pacemaker PacemakerFastWendyEC, tls bool, connectTimeout, qcTimeout time.Duration) *FastWendyEC {
 	wendyEC := &FastWendyEC{
 		pacemaker:       pacemaker,
 		FastWendyCoreEC: consensus.NewFastWendyEC(conf),
@@ -160,7 +160,7 @@ func (wendyEC *FastWendyEC) startServer(port string) error {
 	serverOpts = append(serverOpts, proto.WithGRPCServerOptions(grpcServerOpts...))
 
 	wendyEC.server = newFastWendyECServer(wendyEC, proto.NewGorumsServer(serverOpts...))
-	wendyEC.server.RegisterWendyECServer(wendyEC.server)
+	wendyEC.server.RegisterFastWendyECServer(wendyEC.server)
 
 	go wendyEC.server.Serve(lis)
 	return nil
@@ -187,20 +187,26 @@ func (wendyEC *FastWendyEC) Propose() {
 
 // SendNewView sends a NEW-VIEW message to a specific replica
 func (wendyEC *FastWendyEC) SendNewView(id config.ReplicaID) {
-	qc := wendyEC.GetQCHigh()
 	if node, ok := wendyEC.nodes[id]; ok {
 		//node.NewView(proto.QuorumCertToProto(qc))
 		v := strconv.FormatInt(int64(wendyEC.FastWendyCoreEC.GetHeight()), 2)
 		vD := strconv.FormatInt(int64(wendyEC.FastWendyCoreEC.GetHeight()-wendyEC.FastWendyCoreEC.GetLock().Height), 2)
 		msg := data.AggMessage{C: vD, V: v}
 		var AS data.AggregateSignature
-		sig := AS.SignShare(wendyEC.FastWendyCoreEC.Config.ProofPrivKeys, msg)
-		newViewMsg := data.NewViewMsg{LockCertificate: qc, Message: msg, Signature: sig}
+		sig := AS.SignShare(wendyEC.FastWendyCoreEC.Config.ProofNCPrivKeys, msg)
+
+		vDWL := strconv.FormatInt(int64(wendyEC.FastWendyCoreEC.GetHeight()-wendyEC.FastWendyCoreEC.GetWeakLock().Height), 2)
+		msgWL := data.AggMessage{C: vDWL, V: v}
+		sigWL := AS.SignShare(wendyEC.FastWendyCoreEC.Config.ProofNCPrivKeys, msg)
+
+		newViewMsg := data.NewViewMsgFastWendy{LockCertificate: wendyEC.GetQCLock(), Message: msg, Signature: sig, ID: id,
+			WeakLockCertificate: wendyEC.GetQCWeakLock(), MessageWeakLock: msgWL, SignatureWeakLock: sigWL, Vote: wendyEC.GetPCVote()}
+
 		node.NewView(proto.NewViewMsgToProto(newViewMsg))
 	}
 }
 
-func (wendyEC *FastWendyEC) handlePropose(block *data.Block) {
+func (wendyEC *FastWendyEC) handlePropose(block *data.BlockFastWendy) {
 	p, nack, err := wendyEC.OnReceiveProposal(block)
 	leaderID := wendyEC.pacemaker.GetLeader(block.Height)
 	if err != nil {

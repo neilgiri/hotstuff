@@ -76,7 +76,7 @@ func (pqc *QuorumCert) FromProto() *data.QuorumCert {
 }
 
 // BlockToProto returns
-func BlockToProto(n *data.Block) *Block {
+func BlockToProto(n *data.BlockFastWendy) *Block {
 	commands := make([]*Command, 0, len(n.Commands))
 	for _, cmd := range n.Commands {
 		commands = append(commands, CommandToProto(cmd))
@@ -86,19 +86,29 @@ func BlockToProto(n *data.Block) *Block {
 		Commands:   commands,
 		QC:         QuorumCertToProto(n.Justify),
 		Height:     int64(n.Height),
+		//LockProof:     ProofNCToProto(n.LockProofNC),
+		//HighLock:      QuorumCertToProto(n.HighLockCert),
+		//WeakLockProof: ProofNCToProto(n.WeakLockProofN,
+		//HighWeakLock:  QuorumCertToProto(n.HighWeakLockCert),
+		//HighVotes:     VoteMapToProto(n.HighVotes),
 	}
 }
 
 // FromProto returns
-func (pn *Block) FromProto() *data.Block {
+func (pn *Block) FromProto() *data.BlockFastWendy {
 	commands := make([]data.Command, 0, len(pn.GetCommands()))
 	for _, cmd := range pn.GetCommands() {
 		commands = append(commands, cmd.FromProto())
 	}
-	n := &data.Block{
+	n := &data.BlockFastWendy{
 		Justify:  pn.GetQC().FromProto(),
 		Height:   int(pn.Height),
 		Commands: commands,
+		//LockProofNC:      pn.GetLockProof().FromProto(),
+		//HighLockCert:     pn.GetHighLock().FromProto(),
+		//WeakLockProofNC:  pn.GetWeakLockProof().FromProto(),
+		//HighWeakLockCert: pn.GetHighWeakLock().FromProto(),
+		//HighVotes:        pn.GetHighVotes().FromProto(),
 	}
 	copy(n.ParentHash[:], pn.GetParentHash())
 	return n
@@ -148,17 +158,26 @@ func (keyAggMessagePair *KeyAggMessagePair) FromProto() data.KeyAggMessagePair {
 }
 
 // NewViewMsgToProto returns
-func NewViewMsgToProto(message data.NewViewMsg) *NewViewMsg {
+func NewViewMsgToProto(message data.NewViewMsgFastWendy) *NewViewMsg {
 	return &NewViewMsg{LockCertificate: QuorumCertToProto(message.LockCertificate),
-		Message: AggMessageToProto(message.Message), Signature: message.Signature.Serialize(), ReplicaID: int32(message.ID)}
+		MessageLock: AggMessageToProto(message.Message), SignatureLock: message.Signature.Serialize(), ReplicaID: int32(message.ID),
+		WeakLockCertificate: QuorumCertToProto(message.WeakLockCertificate),
+		MessageWeakLock:     AggMessageToProto(message.MessageWeakLock), SignatureWeakLock: message.SignatureWeakLock.Serialize(),
+		Vote: PartialCertToProto(message.Vote),
+	}
 }
 
 // FromProto returns
-func (newViewMsg *NewViewMsg) FromProto() data.NewViewMsg {
+func (newViewMsg *NewViewMsg) FromProto() data.NewViewMsgFastWendy {
 	var sig bls.Sign
-	sig.Deserialize(newViewMsg.Signature)
-	return data.NewViewMsg{LockCertificate: newViewMsg.LockCertificate.FromProto(),
-		Message: newViewMsg.Message.FromProto(), Signature: sig, ID: config.ReplicaID(newViewMsg.ReplicaID)}
+	sig.Deserialize(newViewMsg.SignatureLock)
+	var sigWL bls.Sign
+	sigWL.Deserialize(newViewMsg.SignatureWeakLock)
+	return data.NewViewMsgFastWendy{LockCertificate: newViewMsg.LockCertificate.FromProto(),
+		Message: newViewMsg.MessageLock.FromProto(), Signature: sig, ID: config.ReplicaID(newViewMsg.ReplicaID),
+		WeakLockCertificate: newViewMsg.WeakLockCertificate.FromProto(),
+		MessageWeakLock:     newViewMsg.MessageWeakLock.FromProto(), SignatureWeakLock: sigWL, Vote: newViewMsg.GetVote().FromProto(),
+	}
 }
 
 // ProofNCToProto returns
@@ -195,4 +214,36 @@ func (nack *NackMsg) FromProto() data.NackMsg {
 	h := new(data.BlockHash)
 	copy(h[:], nack.Hash)
 	return data.NackMsg{HighLockCertificate: nack.QC.FromProto(), Hash: *h}
+}
+
+// VoteMapToProto returns
+func VoteMapToProto(message data.VoteMap) *VoteMap {
+	voteMap := make([]*VoteGroup, len(message.VoteGroup))
+	count := 0
+	for k, v := range message.VoteGroup {
+		group := make([]*PartialCert, len(v))
+		for i, j := range v {
+			group[i] = PartialCertToProto(j)
+		}
+		voteMap[count] = &VoteGroup{Key: k, Value: group}
+		count++
+	}
+	return &VoteMap{Group: voteMap}
+}
+
+// FromProto returns
+func (voteMap *VoteMap) FromProto() data.VoteMap {
+	mapVote := make(map[string][]*data.PartialCert, len(voteMap.Group))
+
+	for _, val := range voteMap.Group {
+		group := make([]*data.PartialCert, len(val.Value))
+		count := 0
+		for _, j := range val.Value {
+			group[count] = j.FromProto()
+			count++
+		}
+		mapVote[val.Key] = group
+	}
+
+	return data.VoteMap{VoteGroup: mapVote}
 }

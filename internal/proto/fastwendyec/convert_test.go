@@ -70,8 +70,8 @@ func TestMarshalingQuorumCertToProto(t *testing.T) {
 }
 
 func TestMarshalAndUnmarshalBlock(t *testing.T) {
-	testBlock := &data.Block{Commands: []data.Command{data.Command("test")}}
-	testQC := data.CreateQuorumCert(testBlock)
+	testBlock := &data.BlockFastWendy{Commands: []data.Command{data.Command("test")}}
+	testQC := data.CreateQuorumCertFastWendy(testBlock)
 	numSigs, _ := rand.Int(rand.Reader, big.NewInt(10))
 	for j := int64(0); j < numSigs.Int64(); j++ {
 		id, _ := rand.Int(rand.Reader, big.NewInt(1000))

@@ -15,20 +15,21 @@ func init() {
 	logger = logging.GetLogger()
 }
 
-// FixedLeaderWendyEC uses a fixed leader.
+// FixedLeaderFastWendyEC uses a fixed leader.
 type FixedLeaderFastWendyEC struct {
 	*hotstuff.FastWendyEC
 	leader config.ReplicaID
-	notify chan consensus.Event
+	notify chan consensus.EventFastWendy
 }
 
-// NewFixedLeaderWendyEC returns a new fixed leader pacemaker
+// NewFixedLeaderFastWendyEC returns a new fixed leader pacemaker
 func NewFixedLeaderFastWendyEC(leaderID config.ReplicaID) *FixedLeaderFastWendyEC {
 	return &FixedLeaderFastWendyEC{
 		leader: leaderID,
 	}
 }
 
+// Init func
 func (p *FixedLeaderFastWendyEC) Init(wendyEC *hotstuff.FastWendyEC) {
 	p.FastWendyEC = wendyEC
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),
@@ -38,6 +39,7 @@ func (p *FixedLeaderFastWendyEC) Init(wendyEC *hotstuff.FastWendyEC) {
 	p.notify = wendyEC.GetEvents()
 }
 
+// GetLeader func
 func (p *FixedLeaderFastWendyEC) GetLeader(_ int) config.ReplicaID {
 	return p.leader
 }
@@ -48,7 +50,7 @@ func (p *FixedLeaderFastWendyEC) Run(ctx context.Context) {
 		logger.Println("Beat")
 		go p.Propose()
 	}
-	var n consensus.Event
+	var n consensus.EventFastWendy
 	var ok bool
 	for {
 		select {
@@ -69,20 +71,20 @@ func (p *FixedLeaderFastWendyEC) Run(ctx context.Context) {
 	}
 }
 
-// RoundRobinWendyEC change leader in a RR fashion. The amount of commands to be executed before it changes leader can be customized.
+// RoundRobinFastWendyEC change leader in a RR fashion. The amount of commands to be executed before it changes leader can be customized.
 type RoundRobinFastWendyEC struct {
 	*hotstuff.FastWendyEC
 
 	termLength int
 	schedule   []config.ReplicaID
 	timeout    time.Duration
-	notify     chan consensus.Event
+	notify     chan consensus.EventFastWendy
 
 	resetTimer  chan struct{} // sending on this channel will reset the timer
 	stopTimeout func()        // stops the new-view interrupts
 }
 
-// NewRoundRobinWendyEC returns a new round robin pacemaker
+// NewRoundRobinFastWendyEC returns a new round robin pacemaker
 func NewRoundRobinFastWendyEC(termLength int, schedule []config.ReplicaID, timeout time.Duration) *RoundRobinFastWendyEC {
 	return &RoundRobinFastWendyEC{
 		termLength: termLength,
@@ -92,6 +94,7 @@ func NewRoundRobinFastWendyEC(termLength int, schedule []config.ReplicaID, timeo
 	}
 }
 
+// Init func
 func (p *RoundRobinFastWendyEC) Init(wendyEC *hotstuff.FastWendyEC) {
 	p.FastWendyEC = wendyEC
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),
@@ -170,7 +173,7 @@ func (p *RoundRobinFastWendyEC) startNewViewTimeout(stopContext context.Context)
 			// add a dummy block to the tree representing this round which failed
 			logger.Println("NewViewTimeout triggered")
 			newHeight := p.GetHeight() + 1
-			p.SetLeaf(consensus.CreateLeaf(p.GetLeaf(), nil, nil, newHeight))
+			p.SetLeaf(consensus.CreateLeafFastWendy(p.GetLeaf(), nil, nil, newHeight))
 			p.SendNewView(p.GetLeader(newHeight))
 		}
 	}

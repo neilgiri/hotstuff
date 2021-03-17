@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
 )
 
@@ -20,6 +19,15 @@ type BlockStorage interface {
 	Get(BlockHash) (*Block, bool)
 	BlockOf(*QuorumCert) (*Block, bool)
 	ParentOf(*Block) (*Block, bool)
+	GarbageCollectBlocks(int)
+}
+
+// BlockStorageFastWendy provides a means to store a block based on its hash
+type BlockStorageFastWendy interface {
+	Put(*BlockFastWendy)
+	Get(BlockHash) (*BlockFastWendy, bool)
+	BlockOf(*QuorumCert) (*BlockFastWendy, bool)
+	ParentOf(*BlockFastWendy) (*BlockFastWendy, bool)
 	GarbageCollectBlocks(int)
 }
 
@@ -63,20 +71,26 @@ type BlockBls struct {
 
 // BlockFastWendy represents a block in the tree of commands
 type BlockFastWendy struct {
-	hash           *BlockHash
-	Proposer       config.ReplicaID
-	ParentHash     BlockHash
-	Commands       []Command
-	Justify        *QuorumCertBls
-	Height         int
-	Committed      bool
-	publicKeysLock []bls.PublicKey
-	publicWeakLock []bls.PublicKey
-	aggSigLock     bls.Sign
-	aggSigWeakLock bls.Sign
+	hash             *BlockHash
+	Proposer         config.ReplicaID
+	ParentHash       BlockHash
+	Commands         []Command
+	Justify          *QuorumCert
+	Height           int
+	Committed        bool
+	LockProofNC      ProofNC
+	HighLockCert     *QuorumCert
+	WeakLockProofNC  ProofNC
+	HighWeakLockCert *QuorumCert
+	HighVotes        VoteMap
 }
 
 func (n Block) String() string {
+	return fmt.Sprintf("Block{Parent: %.8s, Justify: %s, Height: %d, Committed: %v}",
+		n.ParentHash, n.Justify, n.Height, n.Committed)
+}
+
+func (n BlockFastWendy) String() string {
 	return fmt.Sprintf("Block{Parent: %.8s, Justify: %s, Height: %d, Committed: %v}",
 		n.ParentHash, n.Justify, n.Height, n.Committed)
 }
@@ -88,6 +102,36 @@ func (n BlockBls) String() string {
 
 // Hash returns a hash digest of the block.
 func (n Block) Hash() BlockHash {
+	// return cached hash if available
+	if n.hash != nil {
+		return *n.hash
+	}
+
+	s256 := sha256.New()
+
+	s256.Write(n.ParentHash[:])
+
+	height := make([]byte, 8)
+	binary.LittleEndian.PutUint64(height, uint64(n.Height))
+	s256.Write(height[:])
+
+	if n.Justify != nil {
+		s256.Write(n.Justify.ToBytes())
+	}
+
+	for _, cmd := range n.Commands {
+		s256.Write([]byte(cmd))
+	}
+
+	n.hash = new(BlockHash)
+	sum := s256.Sum(nil)
+	copy(n.hash[:], sum)
+
+	return *n.hash
+}
+
+// Hash returns a hash digest of the block.
+func (n BlockFastWendy) Hash() BlockHash {
 	// return cached hash if available
 	if n.hash != nil {
 		return *n.hash
@@ -153,6 +197,13 @@ type MapStorage struct {
 	blocks map[BlockHash]*Block
 }
 
+// MapStorageFastWendy is a simple implementation of BlockStorage that uses a concurrent map.
+type MapStorageFastWendy struct {
+	// TODO: Experiment with RWMutex
+	mut    sync.Mutex
+	blocks map[BlockHash]*BlockFastWendy
+}
+
 // MapStorageBls is a simple implementation of BlockStorage that uses a concurrent map.
 type MapStorageBls struct {
 	// TODO: Experiment with RWMutex
@@ -167,6 +218,13 @@ func NewMapStorage() *MapStorage {
 	}
 }
 
+// NewMapStorageFastWendy returns a new instance of MapStorage
+func NewMapStorageFastWendy() *MapStorageFastWendy {
+	return &MapStorageFastWendy{
+		blocks: make(map[BlockHash]*BlockFastWendy),
+	}
+}
+
 // NewMapStorageBls returns a new instance of MapStorage
 func NewMapStorageBls() *MapStorageBls {
 	return &MapStorageBls{
@@ -176,6 +234,17 @@ func NewMapStorageBls() *MapStorageBls {
 
 // Put inserts a block into the map
 func (s *MapStorage) Put(block *Block) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	hash := block.Hash()
+	if _, ok := s.blocks[hash]; !ok {
+		s.blocks[hash] = block
+	}
+}
+
+// Put inserts a block into the map
+func (s *MapStorageFastWendy) Put(block *BlockFastWendy) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -206,6 +275,15 @@ func (s *MapStorage) Get(hash BlockHash) (block *Block, ok bool) {
 }
 
 // Get gets a block from the map based on its hash.
+func (s *MapStorageFastWendy) Get(hash BlockHash) (block *BlockFastWendy, ok bool) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	block, ok = s.blocks[hash]
+	return
+}
+
+// Get gets a block from the map based on its hash.
 func (s *MapStorageBls) Get(hash BlockHash) (block *BlockBls, ok bool) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
@@ -216,6 +294,15 @@ func (s *MapStorageBls) Get(hash BlockHash) (block *BlockBls, ok bool) {
 
 // BlockOf returns the block associated with the quorum cert
 func (s *MapStorage) BlockOf(qc *QuorumCert) (block *Block, ok bool) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	block, ok = s.blocks[qc.BlockHash]
+	return
+}
+
+// BlockOf returns the block associated with the quorum cert
+func (s *MapStorageFastWendy) BlockOf(qc *QuorumCert) (block *BlockFastWendy, ok bool) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -242,6 +329,15 @@ func (s *MapStorage) ParentOf(child *Block) (parent *Block, ok bool) {
 }
 
 // ParentOf returns the parent of the given Block
+func (s *MapStorageFastWendy) ParentOf(child *BlockFastWendy) (parent *BlockFastWendy, ok bool) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	parent, ok = s.blocks[child.ParentHash]
+	return
+}
+
+// ParentOf returns the parent of the given Block
 func (s *MapStorageBls) ParentOf(child *BlockBls) (parent *BlockBls, ok bool) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
@@ -258,6 +354,28 @@ func (s *MapStorage) GarbageCollectBlocks(currentVeiwHeigth int) {
 	var deleteAncestors func(block *Block)
 
 	deleteAncestors = func(block *Block) {
+		parent, ok := s.blocks[block.ParentHash]
+		if ok {
+			deleteAncestors(parent)
+		}
+		delete(s.blocks, block.Hash())
+	}
+
+	for _, n := range s.blocks {
+		if n.Height+50 < currentVeiwHeigth {
+			deleteAncestors(n)
+		}
+	}
+}
+
+// GarbageCollectBlocks dereferences old Blocks that are no longer needed
+func (s *MapStorageFastWendy) GarbageCollectBlocks(currentVeiwHeigth int) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	var deleteAncestors func(block *BlockFastWendy)
+
+	deleteAncestors = func(block *BlockFastWendy) {
 		parent, ok := s.blocks[block.ParentHash]
 		if ok {
 			deleteAncestors(parent)

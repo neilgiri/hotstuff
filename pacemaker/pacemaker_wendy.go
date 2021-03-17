@@ -15,20 +15,21 @@ func init() {
 	logger = logging.GetLogger()
 }
 
-// FixedLeader uses a fixed leader.
+// FixedLeaderWendy uses a fixed leader.
 type FixedLeaderWendy struct {
 	*hotstuff.Wendy
 	leader config.ReplicaID
 	notify chan consensus.EventBls
 }
 
-// NewFixedLeader returns a new fixed leader pacemaker
+// NewFixedLeaderWendy returns a new fixed leader pacemaker
 func NewFixedLeaderWendy(leaderID config.ReplicaID) *FixedLeaderWendy {
 	return &FixedLeaderWendy{
 		leader: leaderID,
 	}
 }
 
+// Init func
 func (p *FixedLeaderWendy) Init(wendy *hotstuff.Wendy) {
 	p.Wendy = wendy
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),
@@ -38,6 +39,7 @@ func (p *FixedLeaderWendy) Init(wendy *hotstuff.Wendy) {
 	p.notify = wendy.GetEvents()
 }
 
+// GetLeader func
 func (p *FixedLeaderWendy) GetLeader(_ int) config.ReplicaID {
 	return p.leader
 }
@@ -69,7 +71,7 @@ func (p *FixedLeaderWendy) Run(ctx context.Context) {
 	}
 }
 
-// RoundRobin change leader in a RR fashion. The amount of commands to be executed before it changes leader can be customized.
+// RoundRobinBls change leader in a RR fashion. The amount of commands to be executed before it changes leader can be customized.
 type RoundRobinBls struct {
 	*hotstuff.Wendy
 
@@ -82,7 +84,7 @@ type RoundRobinBls struct {
 	stopTimeout func()        // stops the new-view interrupts
 }
 
-// NewRoundRobin returns a new round robin pacemaker
+// NewRoundRobinBls returns a new round robin pacemaker
 func NewRoundRobinBls(termLength int, schedule []config.ReplicaID, timeout time.Duration) *RoundRobinBls {
 	return &RoundRobinBls{
 		termLength: termLength,
@@ -92,6 +94,7 @@ func NewRoundRobinBls(termLength int, schedule []config.ReplicaID, timeout time.
 	}
 }
 
+// Init func
 func (p *RoundRobinBls) Init(wendy *hotstuff.Wendy) {
 	p.Wendy = wendy
 	// Hack: We receive a channel to HotStuff at this point instead of in Run(),

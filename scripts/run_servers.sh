@@ -3,8 +3,8 @@
 trap 'trap - SIGTERM && kill -- -$$' SIGINT SIGTERM EXIT
 
 #bin=cmd/hotstuffserver/hotstuffserver
-bin=cmd/wendyecserver/wendyecserver
-
+#bin=cmd/wendyecserver/wendyecserver
+bin=cmd/fastwendyecserver/fastwendyecserver
 
 run_with_rr() {
 	export _RR_TRACE_DIR="rr/r$1"
@@ -31,10 +31,10 @@ if [[ "$1" == "record" ]]; then
 	exit 0
 fi
 
-$bin --self-id 1 --privkey keys/r1.key --cpuprofile cpuprofile.out --memprofile memprofile.out --print-throughput=true "$@" &
-$bin --self-id 2 --privkey keys/r2.key "$@" --print-throughput=true &
-$bin --self-id 3 --privkey keys/r3.key "$@" --print-throughput=true &
-$bin --self-id 4 --privkey keys/r4.key "$@" --print-throughput=true &
+$bin --self-id 1 --privkey keys/r1.key --cpuprofile cpuprofile.out --memprofile memprofile.out --batch-size 100 --print-throughput=true "$@" &
+$bin --self-id 2 --privkey keys/r2.key "$@" --batch-size 100 --print-throughput=true &
+$bin --self-id 3 --privkey keys/r3.key "$@" --batch-size 100 --print-throughput=true &
+$bin --self-id 4 --privkey keys/r4.key "$@" --batch-size 100 --print-throughput=true &
 
 
 if [ "$1" = "kill" ]; then

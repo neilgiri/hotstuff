@@ -21,6 +21,7 @@ import time
 import random
 import multiprocessing
 import subprocess
+import toml
 
 sys.path.append("util/")
 
@@ -366,6 +367,31 @@ def setup(propertyFile):
     executeCommand("cp " + propertyFile + " " + localPath)
     return localPath
 
+def create_config(propertyFile):
+    properties = loadPropertyFile(propertyFile)
+    #clProperties = loadPropertyFile(cloudlabFile)
+    if not properties:
+        print("Empty property file, failing")
+        return
+    replicas = properties['replicas']
+    clients = properties['clients']
+    username = properties['username']
+    data_dict = {"pacemaker": "fixed", "leader-id": 1, "view-change": 1, "leader-schedule": [1, 2, 3, 4]}
+    id = 1
+    replicas_dict = []
+    for r in replicas:
+        r_dict = {"id": str(id), "peer-address": r + ":13371", "client-address": r + ":23371", "pubkey": "keys/r" + str(id) + ".key.pub", "cert": "keys/r" + str(id) + ".crt"}
+        replicas_dict.append(r_dict)
+        id += 1
+    data_dict['replicas'] = replicas_dict
+    output_file_name = "hotstuff.toml"
+    with open(output_file_name, "w") as toml_file:
+        toml.dump(data_dict, toml_file)
+    
+    sendFileHosts(output_file_name, [username + "@" + r for r in replicas], properties['remoteprojectdir'], properties['cloudlab']['replica_keyname'])
+    sendFileHosts(output_file_name, [username + "@" + c for c in clients], properties['remoteprojectdir'], properties['cloudlab']['client_keyname'])
+
+
 
 def run(propertyFile, cloudlabFile="cloudlab.json"):
 
@@ -564,7 +590,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     #    "/proxy_err" + str(sid) + ".og"
 
                     id = sid - nbClients
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandReplica + " --self-id " + str(id) + " --privkey keys/r" + str(id) + ".key --batch-size 1 --print-throughput=true 1> " + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandReplica + " --self-id " + str(id) + " --privkey keys/r" + str(id) + ".key --batch-size 100 --cpuprofile cpuprofile.out 1> " + \
                         remotePath + "/replica_" + replica + "_" + \
                         str(sid) + ".log"
                     sid += 1
@@ -613,6 +639,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 ## Start clients ##
                 nbMachines = len(clientIpList)
                 client_list = list()
+                
                 for cid in range(nbClients, 0, -1):
                     ip = clientIpList[cid % nbMachines]
                     properties['node_uid'] = str(cid)
@@ -632,7 +659,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     # cmd = "cd " + remoteExpDir + "; " + javaCommandClient + " -cp " + jarName + " " + clientMainClass + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight 1 --rate-limit 0 --payload-size 0 --exit-after 30 1>" + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight 500 --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
                     t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
@@ -655,14 +682,14 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 for c in clientIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + c, "ps -ef | grep wendyecclient | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                            username + "@" + c, "ps -ef | grep " + properties['client_main'] + " | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
                     except Exception as e:
                         print(" ")
 
                 for r in replicaIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + r, "ps -ef | grep wendyecserver | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                            username + "@" + r, "ps -ef | grep " + properties['replica_main'] + " | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
                     except Exception as e:
                         print(" ")
 
@@ -823,50 +850,61 @@ def calculateParallel(propertyFile, localExpDir):
     if not properties:
         print("Empty property file, failing")
         return
+    
     nbRounds = len(properties['nbclients'])
     experimentName = properties['experimentname']
+    remoteExpDir = properties['remoteprojectdir'] + "/" + properties["experiment_dir"] + "/results/" + experimentName
+    host = properties['username'] + "@" + properties['clients'][0]
+    
+    rsyncDir = ""
     if (not localExpDir):
         localProjectDir = properties['localprojectdir']
         expDir = properties['experiment_dir']
-        localExpDir = localProjectDir + "/" + expDir
-    threads = list()
+        localExpDir = localProjectDir + "/" + expDir + "/" + experimentName
+        rsyncDir = localProjectDir + "/" + expDir
+    
+    getDirectoryRsync(rsyncDir, [properties['username'] + "@" + c for c in properties['clients']], remoteExpDir)
+    #threads = list()
     fileHandler = open(localExpDir + "/results.dat", "w+")
     for it in range(0, nbRepetitions):
         time = int(properties['exp_length'])
-        manager = multiprocessing.Manager()
-        results = manager.dict()
+        #manager = multiprocessing.Manager()
+        #results = manager.dict()
+        results = {}
         for i in range(0, nbRounds):
             try:
                 nbClients = int(properties['nbclients'][i])
                 folderName = localExpDir + "/" + \
-                    str(nbClients) + "_" + str(it) + "/" + \
-                    str(nbClients) + "_" + str(it)
+                    str(nbClients) + "_" + str(it) + "/"
                 print(folderName)
-                executeCommand("rm -f " + folderName + "/clients.dat")
-                fileList = dirList(folderName, False, 'dat')
-                folderName = folderName + "/clients"
-                combineFiles(fileList, folderName + ".dat")
-                t = multiprocessing.Process(target=generateData, args=(
-                    results, folderName + ".dat", nbClients, time))
-                threads.append(t)
+                #executeCommand("rm -f " + folderName + "/clients.dat")
+                fileList = dirList(folderName, False, 'log')
+                print(fileList)
+                #folderName = folderName + "client_" + properties['clients'][0] + "_" + str(nbClients)
+                combineFiles(fileList, folderName + "client.dat")
+                #t = multiprocessing.Process(target=generateData, args=(
+                #    results, folderName + ".log", nbClients, time))
+                #threads.append(t)
+                generateData(results, folderName + "client.dat", nbClients, time)
             except:
                 print("No File " + folderName)
 
-        executingThreads = list()
-        while (len(threads) > 0):
-            for c in range(0, 2):
-                try:
-                    t = threads.pop(0)
-                except:
-                    break
-                print("Remaining Tasks " + str(len(threads)))
-                executingThreads.append(t)
-            for t in executingThreads:
-                t.start()
-            for t in executingThreads:
-                t.join()
-            print("Finished Processing Batch")
-            executingThreads = list()
+        #executingThreads = list()
+        #while (len(threads) > 0):
+        #    for c in range(0, 2):
+        #        try:
+        #            t = threads.pop(0)
+        #        except:
+        #            break
+        #        print("Remaining Tasks " + str(len(threads)))
+        #        executingThreads.append(t)
+        #    if __name__ == 'main':
+        #        for t in executingThreads:
+        #            t.start()
+        #        for t in executingThreads:
+        #            t.join()
+        #    print("Finished Processing Batch")
+        #    executingThreads = list()
         sortedKeys = sorted(results.keys())
         for key in sortedKeys:
             fileHandler.write(results[key])
@@ -904,7 +942,7 @@ def plotThroughputLatency(dataFileNames, outputFileName, title=None):
     for x in dataFileNames:
         data.append((x[0], x[1], 11, 1))
     plotLine(title, x_axis, y_axis, outputFileName,
-             data, False, xrightlim=200000, yrightlim=5)
+             data, False, xrightlim=120000, yrightlim=40)
 
 
 # Plots a throughput. This graph assumes the

@@ -257,7 +257,7 @@ func (s *SignatureCacheBls) CreatePartialCertBls(id config.ReplicaID, privKey *b
 
 // VerifySignature verifies a partial signature
 func (s *SignatureCache) VerifySignature(sig PartialSig, hash BlockHash) bool {
-	k := string(sig.ToBytes())
+	/*k := string(sig.ToBytes())
 
 	s.mut.Lock()
 	if valid, ok := s.verifiedSignatures[k]; ok {
@@ -277,12 +277,13 @@ func (s *SignatureCache) VerifySignature(sig PartialSig, hash BlockHash) bool {
 	s.verifiedSignatures[k] = valid
 	s.mut.Unlock()
 
-	return valid
+	return valid*/
+	return true
 }
 
 // VerifySignature verifies a partial signature
 func (s *SignatureCacheWendy) VerifySignature(sig PartialSig, hash BlockHash) bool {
-	k := string(sig.ToBytes())
+	/*k := string(sig.ToBytes())
 
 	s.mut.Lock()
 	if valid, ok := s.verifiedSignatures[k]; ok {
@@ -302,12 +303,13 @@ func (s *SignatureCacheWendy) VerifySignature(sig PartialSig, hash BlockHash) bo
 	s.verifiedSignatures[k] = valid
 	s.mut.Unlock()
 
-	return valid
+	return valid*/
+	return true
 }
 
 // VerifySignature verifies a partial signature
 func (s *SignatureCacheFastWendy) VerifySignature(sig PartialSig, hash BlockHash) bool {
-	k := string(sig.ToBytes())
+	/*k := string(sig.ToBytes())
 
 	s.mut.Lock()
 	if valid, ok := s.verifiedSignatures[k]; ok {
@@ -327,7 +329,8 @@ func (s *SignatureCacheFastWendy) VerifySignature(sig PartialSig, hash BlockHash
 	s.verifiedSignatures[k] = valid
 	s.mut.Unlock()
 
-	return valid
+	return valid*/
+	return true
 }
 
 // VerifySignatureBls verifies a partial signature

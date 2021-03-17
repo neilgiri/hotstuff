@@ -1796,6 +1796,11 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 			wendyEC.bExec = block1 // DECIDE on block1
 		}
 
+		// Free up space by deleting old data
+		wendyEC.Blocks.GarbageCollectBlocks(wendyEC.GetVotedHeight())
+		wendyEC.cmdCache.TrimToLen(wendyEC.Config.BatchSize * 5)
+		wendyEC.SigCache.EvictOld(wendyEC.Config.FastQuorumSize * 1)
+
 		if !ok || block2.Committed {
 			return
 		}
@@ -1808,10 +1813,6 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 
 	}
 
-	// Free up space by deleting old data
-	wendyEC.Blocks.GarbageCollectBlocks(wendyEC.GetVotedHeight())
-	wendyEC.cmdCache.TrimToLen(wendyEC.Config.BatchSize * 5)
-	wendyEC.SigCache.EvictOld(wendyEC.Config.QuorumSize * 5)
 }
 
 func (wendyEC *FastWendyCoreEC) commit(block *data.BlockFastWendy) {

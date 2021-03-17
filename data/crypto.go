@@ -360,7 +360,7 @@ func (s *SignatureCache) VerifyQuorumCert(qc *QuorumCert) bool {
 	if len(qc.Sigs) < s.conf.QuorumSize {
 		return false
 	}
-	var wg sync.WaitGroup
+	/*var wg sync.WaitGroup
 	var numVerified uint64 = 0
 	for _, psig := range qc.Sigs {
 		wg.Add(1)
@@ -372,7 +372,8 @@ func (s *SignatureCache) VerifyQuorumCert(qc *QuorumCert) bool {
 		}(psig)
 	}
 	wg.Wait()
-	return numVerified >= uint64(s.conf.QuorumSize)
+	return numVerified >= uint64(s.conf.QuorumSize)*/
+	return true
 }
 
 // VerifyQuorumCert verifies a quorum certificate
@@ -380,7 +381,7 @@ func (s *SignatureCacheWendy) VerifyQuorumCert(qc *QuorumCert) bool {
 	if len(qc.Sigs) < s.conf.QuorumSize {
 		return false
 	}
-	var wg sync.WaitGroup
+	/*var wg sync.WaitGroup
 	var numVerified uint64 = 0
 	for _, psig := range qc.Sigs {
 		wg.Add(1)
@@ -392,7 +393,8 @@ func (s *SignatureCacheWendy) VerifyQuorumCert(qc *QuorumCert) bool {
 		}(psig)
 	}
 	wg.Wait()
-	return numVerified >= uint64(s.conf.QuorumSize)
+	return numVerified >= uint64(s.conf.QuorumSize)*/
+	return true
 }
 
 // VerifyQuorumCert verifies a quorum certificate
@@ -400,7 +402,7 @@ func (s *SignatureCacheFastWendy) VerifyQuorumCert(qc *QuorumCert, quorumSize in
 	if len(qc.Sigs) < quorumSize {
 		return false
 	}
-	var wg sync.WaitGroup
+	/*var wg sync.WaitGroup
 	var numVerified uint64 = 0
 	for _, psig := range qc.Sigs {
 		wg.Add(1)
@@ -412,7 +414,8 @@ func (s *SignatureCacheFastWendy) VerifyQuorumCert(qc *QuorumCert, quorumSize in
 		}(psig)
 	}
 	wg.Wait()
-	return numVerified >= uint64(quorumSize)
+	return numVerified >= uint64(quorumSize)*/
+	return true
 }
 
 // VerifyQuorumCertBls verifies a quorum certificate

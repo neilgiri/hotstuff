@@ -1661,10 +1661,10 @@ func (wendyEC *FastWendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 		logger.Println("OnReceiveVote: could not add partial signature to QC:", err)
 	}
 
-	if len(qc.Sigs) >= wendyEC.Config.QuorumSize {
+	if len(qc.Sigs) >= wendyEC.Config.FastQuorumSize {
 		delete(wendyEC.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
-		wendyEC.UpdateQCHigh(qc, wendyEC.Config.QuorumSize)
+		wendyEC.UpdateQCHigh(qc, wendyEC.Config.FastQuorumSize)
 		wendyEC.emitEvent(EventFastWendy{Type: QCFinish, QC: qc})
 	}
 
@@ -1775,7 +1775,7 @@ func (wendyEC *FastWendyCoreEC) updateAsync(ctx context.Context) {
 
 func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 	// block1 = b'', block2 = b', block3 = b
-	/*block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
+	block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
 	if !ok || block1.Committed {
 		return
 	}
@@ -1784,7 +1784,8 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 	defer wendyEC.mut.Unlock()
 
 	block2, ok := wendyEC.Blocks.BlockOf(block1.Justify)
-	if len(block.Justify.Sigs) >= wendyEC.Config.QuorumSize && len(block.Justify.Sigs) < wendyEC.Config.FastQuorumSize {
+	block3, ok := wendyEC.Blocks.BlockOf(block2.Justify)
+	if len(block.Justify.Sigs) < wendyEC.Config.FastQuorumSize {
 		// Lock on block1
 		logger.Println("LOCK:", block1)
 		// Lock on block1
@@ -1816,6 +1817,10 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 
 		if block.ParentHash == block1.Hash() {
 			logger.Println("DECIDE", block1)
+			wendyEC.commit(block3)
+			wendyEC.bExec = block3
+			wendyEC.commit(block2)
+			wendyEC.bExec = block2 // DECIDE on block1
 			wendyEC.commit(block1)
 			wendyEC.bExec = block1 // DECIDE on block1
 		}
@@ -1835,8 +1840,8 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 			wendyEC.bExec = block2 // DECIDE on block2
 		}
 
-	}*/
-	block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
+	}
+	/*block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
 	if !ok || block1.Committed {
 		return
 	}
@@ -1872,7 +1877,7 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 	// Free up space by deleting old data
 	wendyEC.Blocks.GarbageCollectBlocks(wendyEC.GetVotedHeight())
 	wendyEC.cmdCache.TrimToLen(wendyEC.Config.BatchSize * 5)
-	wendyEC.SigCache.EvictOld(wendyEC.Config.QuorumSize * 5)
+	wendyEC.SigCache.EvictOld(wendyEC.Config.QuorumSize * 5)*/
 
 }
 

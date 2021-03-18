@@ -1487,7 +1487,7 @@ func (wendyEC *FastWendyCoreEC) OnReceiveProposal(block *data.BlockFastWendy) (*
 		return nil, nil, fmt.Errorf("Block was not accepted")
 	}
 
-	if nExists && qcBlock.Height == block.Height-1 {
+	/*if nExists && qcBlock.Height == block.Height-1 {
 		// QC is the highest possible
 		safe := false
 		if nExists && qcBlock.Height > wendyEC.bLock.Height && qcBlock.Height > wendyEC.bWeakLock.Height && qcBlock.Height > wendyEC.bVote.Height {
@@ -1528,6 +1528,30 @@ func (wendyEC *FastWendyCoreEC) OnReceiveProposal(block *data.BlockFastWendy) (*
 			logger.Println("OnReceiveProposal: Block not safe")
 			return nil, nil, fmt.Errorf("Block was not accepted")
 		}
+	}*/
+
+	safe := false
+	if nExists && qcBlock.Height > wendyEC.bLock.Height {
+		safe = true
+	} else {
+		logger.Println("OnReceiveProposal: liveness condition failed")
+		// check if block extends bLock
+		b := block
+		ok := true
+		for ok && b.Height > wendyEC.bLock.Height+1 {
+			b, ok = wendyEC.Blocks.Get(b.ParentHash)
+		}
+		if ok && b.ParentHash == wendyEC.bLock.Hash() {
+			safe = true
+		} else {
+			logger.Println("OnReceiveProposal: safety condition failed")
+		}
+	}
+
+	if !safe {
+		wendyEC.mut.Unlock()
+		logger.Println("OnReceiveProposal: Block not safe")
+		return nil, nil, fmt.Errorf("Block was not accepted")
 	}
 
 	logger.Println("OnReceiveProposal: Accepted block")
@@ -1637,10 +1661,10 @@ func (wendyEC *FastWendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 		logger.Println("OnReceiveVote: could not add partial signature to QC:", err)
 	}
 
-	if len(qc.Sigs) >= wendyEC.Config.FastQuorumSize {
+	if len(qc.Sigs) >= wendyEC.Config.QuorumSize {
 		delete(wendyEC.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
-		wendyEC.UpdateQCHigh(qc, wendyEC.Config.FastQuorumSize)
+		wendyEC.UpdateQCHigh(qc, wendyEC.Config.QuorumSize)
 		wendyEC.emitEvent(EventFastWendy{Type: QCFinish, QC: qc})
 	}
 
@@ -1751,7 +1775,7 @@ func (wendyEC *FastWendyCoreEC) updateAsync(ctx context.Context) {
 
 func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 	// block1 = b'', block2 = b', block3 = b
-	block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
+	/*block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
 	if !ok || block1.Committed {
 		return
 	}
@@ -1811,7 +1835,44 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 			wendyEC.bExec = block2 // DECIDE on block2
 		}
 
+	}*/
+	block1, ok := wendyEC.Blocks.BlockOf(block.Justify)
+	if !ok || block1.Committed {
+		return
 	}
+
+	wendyEC.mut.Lock()
+	defer wendyEC.mut.Unlock()
+
+	logger.Println("PRE COMMIT:", block1)
+	// PRE-COMMIT on block1
+	wendyEC.UpdateQCHigh(block.Justify, wendyEC.Config.QuorumSize)
+
+	block2, ok := wendyEC.Blocks.BlockOf(block1.Justify)
+	if !ok || block2.Committed {
+		return
+	}
+
+	if block2.Height > wendyEC.bLock.Height {
+		wendyEC.bLock = block2 // COMMIT on block2
+		logger.Println("COMMIT:", block2)
+	}
+
+	block3, ok := wendyEC.Blocks.BlockOf(block2.Justify)
+	if !ok || block3.Committed {
+		return
+	}
+
+	if block1.ParentHash == block2.Hash() && block2.ParentHash == block3.Hash() {
+		logger.Println("DECIDE", block3)
+		wendyEC.commit(block3)
+		wendyEC.bExec = block3 // DECIDE on block3
+	}
+
+	// Free up space by deleting old data
+	wendyEC.Blocks.GarbageCollectBlocks(wendyEC.GetVotedHeight())
+	wendyEC.cmdCache.TrimToLen(wendyEC.Config.BatchSize * 5)
+	wendyEC.SigCache.EvictOld(wendyEC.Config.QuorumSize * 5)
 
 }
 

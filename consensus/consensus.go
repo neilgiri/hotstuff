@@ -1784,7 +1784,6 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 	defer wendyEC.mut.Unlock()
 
 	block2, ok := wendyEC.Blocks.BlockOf(block1.Justify)
-	block3, ok := wendyEC.Blocks.BlockOf(block2.Justify)
 	if len(block.Justify.Sigs) < wendyEC.Config.FastQuorumSize {
 		// Lock on block1
 		logger.Println("LOCK:", block1)
@@ -1817,10 +1816,6 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 
 		if block.ParentHash == block1.Hash() {
 			logger.Println("DECIDE", block1)
-			wendyEC.commit(block3)
-			wendyEC.bExec = block3
-			wendyEC.commit(block2)
-			wendyEC.bExec = block2 // DECIDE on block1
 			wendyEC.commit(block1)
 			wendyEC.bExec = block1 // DECIDE on block1
 		}

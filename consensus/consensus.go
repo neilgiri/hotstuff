@@ -1487,7 +1487,7 @@ func (wendyEC *FastWendyCoreEC) OnReceiveProposal(block *data.BlockFastWendy) (*
 		return nil, nil, fmt.Errorf("Block was not accepted")
 	}
 
-	/*if nExists && qcBlock.Height == block.Height-1 {
+	if nExists && qcBlock.Height == block.Height-1 {
 		// QC is the highest possible
 		safe := false
 		if nExists && qcBlock.Height > wendyEC.bLock.Height && qcBlock.Height > wendyEC.bWeakLock.Height && qcBlock.Height > wendyEC.bVote.Height {
@@ -1528,9 +1528,9 @@ func (wendyEC *FastWendyCoreEC) OnReceiveProposal(block *data.BlockFastWendy) (*
 			logger.Println("OnReceiveProposal: Block not safe")
 			return nil, nil, fmt.Errorf("Block was not accepted")
 		}
-	}*/
+	}
 
-	safe := false
+	/*safe := false
 	if nExists && qcBlock.Height > wendyEC.bLock.Height {
 		safe = true
 	} else {
@@ -1552,7 +1552,7 @@ func (wendyEC *FastWendyCoreEC) OnReceiveProposal(block *data.BlockFastWendy) (*
 		wendyEC.mut.Unlock()
 		logger.Println("OnReceiveProposal: Block not safe")
 		return nil, nil, fmt.Errorf("Block was not accepted")
-	}
+	}*/
 
 	logger.Println("OnReceiveProposal: Accepted block")
 	wendyEC.vHeight = block.Height
@@ -1784,7 +1784,7 @@ func (wendyEC *FastWendyCoreEC) update(block *data.BlockFastWendy) {
 	defer wendyEC.mut.Unlock()
 
 	block2, ok := wendyEC.Blocks.BlockOf(block1.Justify)
-	if len(block.Justify.Sigs) < wendyEC.Config.FastQuorumSize {
+	if len(block.Justify.Sigs) >= wendyEC.Config.QuorumSize && len(block.Justify.Sigs) < wendyEC.Config.FastQuorumSize {
 		// Lock on block1
 		logger.Println("LOCK:", block1)
 		// Lock on block1

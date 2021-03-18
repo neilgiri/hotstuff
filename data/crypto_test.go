@@ -105,12 +105,12 @@ func TestVerifyQuorumCert(t *testing.T) {
 
 func BenchmarkVerifyQuorumCert(b *testing.B) {
 	qc := createQuorumCert(nil)
-	/*for n := 0; n < b.N; n++ {
-		VerifyQuorumCertFastWendy(biggerRc, qc, len(qc.Sigs))
-	}*/
 	for n := 0; n < b.N; n++ {
-		VerifyQuorumCert(biggerRc, qc)
+		VerifyQuorumCertFastWendy(biggerRc, qc, len(qc.Sigs))
 	}
+	/*for n := 0; n < b.N; n++ {
+		VerifyQuorumCert(biggerRc, qc)
+	}*/
 }
 
 func BenchmarkQuroumCertToBytes(b *testing.B) {

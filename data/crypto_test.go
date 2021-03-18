@@ -103,6 +103,16 @@ func TestVerifyQuorumCert(t *testing.T) {
 	}
 }
 
+func BenchmarkVerifyQuorumCert(b *testing.B) {
+	qc := createQuorumCert(nil)
+	/*for n := 0; n < b.N; n++ {
+		VerifyQuorumCertFastWendy(biggerRc, qc, len(qc.Sigs))
+	}*/
+	for n := 0; n < b.N; n++ {
+		VerifyQuorumCert(biggerRc, qc)
+	}
+}
+
 func BenchmarkQuroumCertToBytes(b *testing.B) {
 	qc := CreateQuorumCert(testBlock)
 	for _, r := range biggerRc.Replicas {
@@ -134,6 +144,13 @@ func BenchmarkVerifyP256(b *testing.B) {
 }
 
 func BenchmarkPartialSigToBytes(b *testing.B) {
+	pc, _ := CreatePartialCert(0, &pk, testBlock)
+	for n := 0; n < b.N; n++ {
+		pc.Sig.ToBytes()
+	}
+}
+
+func BenchmarkVerifySignature(b *testing.B) {
 	pc, _ := CreatePartialCert(0, &pk, testBlock)
 	for n := 0; n < b.N; n++ {
 		pc.Sig.ToBytes()

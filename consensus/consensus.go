@@ -398,7 +398,7 @@ func (hs *HotStuffCore) commit(block *data.Block) {
 		}
 		block.Committed = true
 		logger.Println("EXEC", block)
-		//fmt.Printf("%s\n", block.String())
+		//fmt.Printf("%d\n", len(block.Commands))
 		hs.exec <- block.Commands
 	}
 }
@@ -1884,7 +1884,7 @@ func (wendyEC *FastWendyCoreEC) commit(block *data.BlockFastWendy) {
 		}
 		block.Committed = true
 		logger.Println("EXEC", block)
-		//fmt.Printf("%s\n", block.String())
+		//fmt.Printf("%d\n", len(block.Commands))
 		wendyEC.exec <- block.Commands
 	}
 }

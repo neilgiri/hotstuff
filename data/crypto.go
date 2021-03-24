@@ -390,8 +390,7 @@ func (s *SignatureCacheWendy) VerifyQuorumCert(qc *QuorumCert) bool {
 	}
 	var wg sync.WaitGroup
 	var numVerified uint64 = 0
-	for i := 0; i < s.conf.QuorumSize; i++ {
-		psig := qc.Sigs[config.ReplicaID(i)]
+	for _, psig := range qc.Sigs {
 		wg.Add(1)
 		go func(psig PartialSig) {
 			if s.VerifySignature(psig, qc.BlockHash) {
@@ -741,8 +740,7 @@ func VerifyQuorumCertFastWendy(conf *config.ReplicaConfig, qc *QuorumCert, quoru
 	}
 	var wg sync.WaitGroup
 	var numVerified uint64 = 0
-	for i := 0; i < quorumSize; i++ {
-		psig := qc.Sigs[config.ReplicaID(i)]
+	for _, psig := range qc.Sigs {
 		info, ok := conf.Replicas[psig.ID]
 		if !ok {
 			logger.Printf("VerifyQuorumSig: got signature from replica whose ID (%d) was not in config.", psig.ID)

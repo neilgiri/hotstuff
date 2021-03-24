@@ -44,7 +44,7 @@ def startInstance(nb, diskImg, instType, index, r = None, link=None):
        
         link.addInterface(iface)
         node.addService(rspec.Install(url="https://github.com/neilgiri/hotstuff/archive/master.tar.gz", path="/users/giridhn"))
-        node.addService(rspec.Execute(shell="bash", command="sudo tar -C /users/giridhn -xvzf /users/giridhn/hotstuff-master.tar.gz ; sudo apt-get update ; sudo apt-get install --yes golang-go"))
+        node.addService(rspec.Execute(shell="bash", command="sudo tar -C /users/giridhn -xvzf /users/giridhn/hotstuff-master.tar.gz ; sudo add-apt-repository ppa:longsleep/golang-backports -y ; sudo apt-get update ; sudo apt-get install --yes golang-go"))
 
         r.addResource(node)
     

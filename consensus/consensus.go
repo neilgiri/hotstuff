@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
@@ -74,6 +75,7 @@ type HotStuffCore struct {
 	bLeaf      *data.Block
 	qcHigh     *data.QuorumCert
 	pendingQCs map[data.BlockHash]*data.QuorumCert
+	start      time.Time
 
 	waitProposal *sync.Cond
 
@@ -161,6 +163,7 @@ func New(conf *config.ReplicaConfig) *HotStuffCore {
 		cmdCache:       data.NewCommandSet(),
 		pendingUpdates: make(chan *data.Block, 1),
 		exec:           make(chan []data.Command, 1),
+		start:          time.Now(),
 	}
 
 	hs.waitProposal = sync.NewCond(&hs.mut)
@@ -302,6 +305,7 @@ func (hs *HotStuffCore) OnReceiveVote(cert *data.PartialCert) {
 		if !ok {
 			qc = data.CreateQuorumCert(b)
 			hs.pendingQCs[cert.BlockHash] = qc
+			hs.start = time.Now()
 		}
 	}
 
@@ -311,6 +315,7 @@ func (hs *HotStuffCore) OnReceiveVote(cert *data.PartialCert) {
 	}
 
 	if len(qc.Sigs) >= hs.Config.QuorumSize {
+		fmt.Printf("%d\n", int64(time.Since(hs.start)/time.Microsecond))
 		delete(hs.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
 		hs.UpdateQCHigh(qc)
@@ -448,6 +453,7 @@ type WendyCoreEC struct {
 	qcHigh         *data.QuorumCert
 	pendingQCs     map[data.BlockHash]*data.QuorumCert
 	viewChangeMsgs map[string][]data.NewViewMsg
+	start          time.Time
 
 	waitProposal *sync.Cond
 
@@ -541,6 +547,7 @@ func NewWendyEC(conf *config.ReplicaConfigWendy) *WendyCoreEC {
 		cmdCache:       data.NewCommandSet(),
 		pendingUpdates: make(chan *data.Block, 1),
 		exec:           make(chan []data.Command, 1),
+		start:          time.Now(),
 	}
 
 	wendyEC.waitProposal = sync.NewCond(&wendyEC.mut)
@@ -682,6 +689,7 @@ func (wendyEC *WendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 		if !ok {
 			qc = data.CreateQuorumCert(b)
 			wendyEC.pendingQCs[cert.BlockHash] = qc
+			wendyEC.start = time.Now()
 		}
 	}
 
@@ -691,6 +699,7 @@ func (wendyEC *WendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 	}
 
 	if len(qc.Sigs) >= wendyEC.Config.QuorumSize {
+		fmt.Printf("%d\n", int64(time.Since(wendyEC.start)/time.Microsecond))
 		delete(wendyEC.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
 		wendyEC.UpdateQCHigh(qc)
@@ -1288,6 +1297,7 @@ type FastWendyCoreEC struct {
 	pendingQCs     map[data.BlockHash]*data.QuorumCert
 	viewChangeMsgs map[string][]data.NewViewMsgFastWendy
 	voteMap        map[string]data.VoteMap
+	start          time.Time
 
 	waitProposal *sync.Cond
 
@@ -1417,6 +1427,7 @@ func NewFastWendyEC(conf *config.ReplicaConfigFastWendy) *FastWendyCoreEC {
 		cmdCache:       data.NewCommandSet(),
 		pendingUpdates: make(chan *data.BlockFastWendy, 1),
 		exec:           make(chan []data.Command, 1),
+		start:          time.Now(),
 	}
 
 	wendyEC.waitProposal = sync.NewCond(&wendyEC.mut)
@@ -1626,10 +1637,10 @@ func (wendyEC *FastWendyCoreEC) CheckViewChange(block *data.BlockFastWendy) bool
 
 // OnReceiveVote handles an incoming vote from a replica
 func (wendyEC *FastWendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
-	if !wendyEC.SigCache.VerifySignature(cert.Sig, cert.BlockHash) {
+	/*if !wendyEC.SigCache.VerifySignature(cert.Sig, cert.BlockHash) {
 		logger.Println("OnReceiveVote: signature not verified!")
 		return
-	}
+	}*/
 
 	logger.Printf("OnReceiveVote: %.8s\n", cert.BlockHash)
 	wendyEC.emitEvent(EventFastWendy{Type: ReceiveVote, Replica: cert.Sig.ID})
@@ -1653,6 +1664,7 @@ func (wendyEC *FastWendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 		if !ok {
 			qc = data.CreateQuorumCertFastWendy(b)
 			wendyEC.pendingQCs[cert.BlockHash] = qc
+			wendyEC.start = time.Now()
 		}
 	}
 
@@ -1662,9 +1674,10 @@ func (wendyEC *FastWendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 	}
 
 	if len(qc.Sigs) >= wendyEC.Config.FastQuorumSize {
+		fmt.Printf("%d\n", int64(time.Since(wendyEC.start)/time.Microsecond))
+		wendyEC.UpdateQCHigh(qc, wendyEC.Config.FastQuorumSize)
 		delete(wendyEC.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
-		wendyEC.UpdateQCHigh(qc, wendyEC.Config.FastQuorumSize)
 		wendyEC.emitEvent(EventFastWendy{Type: QCFinish, QC: qc})
 	}
 

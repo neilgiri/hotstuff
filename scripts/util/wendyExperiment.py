@@ -376,7 +376,7 @@ def create_config(propertyFile):
     replicas = properties['replicas']
     clients = properties['clients']
     username = properties['username']
-    data_dict = {"pacemaker": "fixed", "leader-id": 1, "view-change": 1, "leader-schedule": [1, 2, 3, 4]}
+    data_dict = {"pacemaker": "round-robin", "leader-id": 1, "view-change": 100, "leader-schedule": [1, 2, 3, 4]}
     id = 1
     replicas_dict = []
     for r in replicas:
@@ -590,7 +590,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     #    "/proxy_err" + str(sid) + ".og"
 
                     id = sid - nbClients
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandReplica + " --self-id " + str(id) + " --privkey keys/r" + str(id) + ".key --batch-size 100 --cpuprofile cpuprofile.out 1> " + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandReplica + " --self-id " + str(id) + " --privkey keys/r" + str(id) + ".key --batch-size 1 --cpuprofile cpuprofile.out 1> " + \
                         remotePath + "/replica_" + replica + "_" + \
                         str(sid) + ".log"
                     sid += 1
@@ -659,7 +659,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     # cmd = "cd " + remoteExpDir + "; " + javaCommandClient + " -cp " + jarName + " " + clientMainClass + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight 500 --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight 10 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
                     t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
@@ -682,14 +682,22 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 for c in clientIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + c, "ps -ef | grep " + properties['client_main'] + " | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                            username + "@" + c, "ps -ef | grep wendyecclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + c, "ps -ef | grep fastwendyecclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + c, "ps -ef | grep hotstuffclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
                     except Exception as e:
                         print(" ")
 
                 for r in replicaIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + r, "ps -ef | grep " + properties['replica_main'] + " | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                            username + "@" + r, "ps -ef | grep wendyecserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + r, "ps -ef | grep fastwendyecserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + r, "ps -ef | grep hotstuffserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
                     except Exception as e:
                         print(" ")
 
@@ -942,7 +950,7 @@ def plotThroughputLatency(dataFileNames, outputFileName, title=None):
     for x in dataFileNames:
         data.append((x[0], x[1], 11, 1))
     plotLine(title, x_axis, y_axis, outputFileName,
-             data, False, xrightlim=120000, yrightlim=40)
+             data, False, xleftlim=0, xrightlim=50000, yrightlim=10)
 
 
 # Plots a throughput. This graph assumes the

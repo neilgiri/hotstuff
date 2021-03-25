@@ -278,10 +278,10 @@ func (hs *HotStuffCore) OnReceiveProposal(block *data.Block) (*data.PartialCert,
 
 // OnReceiveVote handles an incoming vote from a replica
 func (hs *HotStuffCore) OnReceiveVote(cert *data.PartialCert) {
-	if !hs.SigCache.VerifySignature(cert.Sig, cert.BlockHash) {
+	/*if !hs.SigCache.VerifySignature(cert.Sig, cert.BlockHash) {
 		logger.Println("OnReceiveVote: signature not verified!")
 		return
-	}
+	}*/
 
 	logger.Printf("OnReceiveVote: %.8s\n", cert.BlockHash)
 	hs.emitEvent(Event{Type: ReceiveVote, Replica: cert.Sig.ID})
@@ -316,9 +316,11 @@ func (hs *HotStuffCore) OnReceiveVote(cert *data.PartialCert) {
 
 	if len(qc.Sigs) >= hs.Config.QuorumSize {
 		fmt.Printf("%d\n", int64(time.Since(hs.start)/time.Microsecond))
+		hs.UpdateQCHigh(qc)
+
 		delete(hs.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
-		hs.UpdateQCHigh(qc)
+		//hs.UpdateQCHigh(qc)
 		hs.emitEvent(Event{Type: QCFinish, QC: qc})
 	}
 
@@ -662,10 +664,10 @@ func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialC
 
 // OnReceiveVote handles an incoming vote from a replica
 func (wendyEC *WendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
-	if !wendyEC.SigCache.VerifySignature(cert.Sig, cert.BlockHash) {
+	/*if !wendyEC.SigCache.VerifySignature(cert.Sig, cert.BlockHash) {
 		logger.Println("OnReceiveVote: signature not verified!")
 		return
-	}
+	}*/
 
 	logger.Printf("OnReceiveVote: %.8s\n", cert.BlockHash)
 	wendyEC.emitEvent(Event{Type: ReceiveVote, Replica: cert.Sig.ID})
@@ -700,9 +702,9 @@ func (wendyEC *WendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 
 	if len(qc.Sigs) >= wendyEC.Config.QuorumSize {
 		fmt.Printf("%d\n", int64(time.Since(wendyEC.start)/time.Microsecond))
+		wendyEC.UpdateQCHigh(qc)
 		delete(wendyEC.pendingQCs, cert.BlockHash)
 		logger.Println("OnReceiveVote: Created QC")
-		wendyEC.UpdateQCHigh(qc)
 		wendyEC.emitEvent(Event{Type: QCFinish, QC: qc})
 	}
 

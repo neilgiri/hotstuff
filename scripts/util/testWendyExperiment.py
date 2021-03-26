@@ -23,7 +23,7 @@ localPath = "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experimen
 dataFile = localPath + "/results.dat"
 outputDataFile = localPath + "/result.pdf"
 data = list()
-data.append((dataFile,"HotStuff BatchSize 100"))
+data.append((dataFile,"HotStuff BatchSize 800, f = 2"))
 #data.append((localPath + "/hs.txt", "Fast Wendy BatchSize 100"))
 #data.append((localPath + "/wendyec.dat", "Slow Wendy BatchSize 1"))
 wendyExperiment.plotThroughputLatency(data, outputDataFile)

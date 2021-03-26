@@ -18,12 +18,14 @@ import cloudlab_util
 #localPath = wendyExperiment.setup('config/test.json')
 #wendyExperiment.create_config('config/test.json')
 wendyExperiment.run('config/test.json')
+# shieldExperiment.cleanup('config/test.json')
 wendyExperiment.calculateParallel('config/test.json', None)
-localPath = "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experiments/testExperiment4"
+localPath = "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experiments/testExperiment11"
 dataFile = localPath + "/results.dat"
 outputDataFile = localPath + "/result.pdf"
 data = list()
-data.append((dataFile,"HotStuff BatchSize 800, f = 2"))
-#data.append((localPath + "/hs.txt", "Fast Wendy BatchSize 100"))
-#data.append((localPath + "/wendyec.dat", "Slow Wendy BatchSize 1"))
+data.append((dataFile,"Fast Wendy BatchSize 100"))
+#data.append((localPath + "/fastwendy.dat", "Fast Wendy BatchSize 100"))
+#data.append((localPath + "/hotstuff.dat", "HotStuff BatchSize 100"))
+# print outputDataFile
 wendyExperiment.plotThroughputLatency(data, outputDataFile)

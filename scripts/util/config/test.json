@@ -7,16 +7,16 @@
   "aws_trx_table_name": "Transactions",
   "aws_wcus": "10000",
   "backing_store_type": "noram_hashmap",
+  "batch_size": "100",
   "cc_manager_type": "nobatch",
   "client_machines": "5",
   "client_type": "shield",
   "clientmain": "wendyecclient",
   "clients": [
-    "128.110.153.186",
-    "128.110.153.209",
-    "128.110.153.229",
-    "128.110.153.227",
-    "128.110.153.183"
+    "128.110.153.125",
+    "128.110.153.203",
+    "128.110.153.217",
+    "128.110.153.199"
   ],
   "cloudlab": {
     "client_ami": "ami-802e1ae5",
@@ -48,7 +48,7 @@
   "exp_dir": "default",
   "exp_length": "60",
   "experiment_dir": "experiments",
-  "experimentname": "testExperiment11",
+  "experimentname": "testExperiment12",
   "expiration": "960",
   "finalise_batch_buffer_t": "10",
   "gc_activated": "false",
@@ -63,17 +63,42 @@
   "key_file_name": "data_keys.txt",
   "key_size": "16",
   "kv_name": "kvstore",
+  "latencies0": [
+    "0",
+    "179",
+    "150",
+    "114"
+  ],
+  "latencies1": [
+    "179",
+    "0",
+    "206",
+    "258"
+  ],
+  "latencies2": [
+    "150",
+    "206",
+    "0",
+    "224"
+  ],
+  "latencies3": [
+    "114",
+    "258",
+    "224",
+    "0"
+  ],
   "loadermain": "shield.benchmarks.ycsb.StartYCSBLoader",
   "localprojectdir": "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff",
   "localsrcdir": "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff",
   "log_folder": "logs",
+  "max_inflight": "50",
   "max_nb_stride": "10",
   "max_pending_batches": "5",
   "min_between_stride": "100",
   "n_receiver_net_threads": "1",
   "n_sender_net_threads": "1",
   "n_worker_threads": "16",
-  "name": "testExperiment11",
+  "name": "testExperiment12",
   "nb_client_threads": "1",
   "nb_keys": "1000",
   "nb_loader_threads": "1",
@@ -82,10 +107,9 @@
   "nbclients": [
     "1",
     "2",
-    "3",
     "4",
-    "5",
-    "6"
+    "6",
+    "8"
   ],
   "oram_a": "8",
   "oram_batch_size": "0",
@@ -108,12 +132,13 @@
   "replica_machines": "4",
   "replicamain": "wendyecserver",
   "replicas": [
-    "128.110.153.198",
-    "128.110.153.156",
-    "128.110.153.228",
-    "128.110.153.174"
+    "128.110.153.239",
+    "128.110.153.155",
+    "128.110.154.78",
+    "128.110.153.219"
   ],
   "run_name": "trx.dat",
+  "simulate_latency": "50",
   "storagemain": "shield.benchmark.utils.StartDataStore",
   "stride_size": "10000",
   "timeout": "15",

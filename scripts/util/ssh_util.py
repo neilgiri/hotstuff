@@ -29,8 +29,8 @@ def executeRemoteCommandWithOutputReturn(host, command, key=None, flags="", port
     return executeCommandWithOutputReturn(cmd)
 
 def getNetInterface(host, key=None,port=22):
-	cmd = "ifconfig | awk \'NR==1{print \$1 }\'"
-	return executeRemoteCommandWithOutputReturn(host,cmd,key,port)
+	cmd = "ifconfig | awk \'NR==1{print substr(\$1, 1, length(\$1) - 1) }\'"
+	return executeRemoteCommandWithOutputReturn(host,cmd,key,"",port)
 
 def executeCommand(command):
     print("Calling " + command)
@@ -44,6 +44,7 @@ def setupTC(host,latency,destHosts,key=None,port=22):
     max_bandwidth="10gibps"
     latency = latency/2
     interface = getNetInterface(host,key)
+    interface = interface.decode("utf-8")
     command = 'sudo tc qdisc del dev %s root; ' % interface
     command += 'sudo tc qdisc add dev %s root handle 1: htb; ' % interface
     command += 'sudo tc class add dev %s parent 1: classid 1:1 htb rate %s; ' % (interface, max_bandwidth) # we want unlimited bandwidth
@@ -56,7 +57,28 @@ def setupTC(host,latency,destHosts,key=None,port=22):
     print("----------")
     print(command)
     print("----------")
-    executeRemoteCommand(host,command,key,port)
+    executeRemoteCommand(host,command,key,"",port)
+
+def setupTCWAN(host,latencies,destHosts,key=None,port=22):
+    max_bandwidth="10gibps"
+    interface = getNetInterface(host,key)
+    interface = interface.decode("utf-8")
+    command = 'sudo tc qdisc del dev %s root; ' % interface
+    command += 'sudo tc qdisc add dev %s root handle 1: htb; ' % interface
+    command += 'sudo tc class add dev %s parent 1: classid 1:1 htb rate %s; ' % (interface, max_bandwidth) # we want unlimited bandwidth
+    idx = 2
+    i = 0
+    for d in destHosts:
+        latency = int(latencies[i]) / 2
+        command += 'sudo tc class add dev %s parent 1:1 classid 1:%d htb rate %s; ' % (interface, idx, max_bandwidth)
+        command += 'sudo tc qdisc add dev %s handle %d: parent 1:%d netem delay %dms; ' % (interface, idx, idx, latency)
+        command += 'sudo tc filter add dev %s pref %d protocol ip u32 match ip dst %s flowid 1:%d; ' % (interface, idx, d, idx)
+        idx += 1
+        i += 1
+    print("----------")
+    print(command)
+    print("----------")
+    executeRemoteCommand(host,command,key,"",port)
 
 def deleteTC(host, destHost,key=None,port=22):
     interface = getNetInterface(host,key)

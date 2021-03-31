@@ -301,7 +301,7 @@ def setup(propertyFile):
         #print(r)
         replicaHostIps = replicaHostIps + r + ","
     replicaHostIps = replicaHostIps[:-1]
-    executeCommand(keygen + " -p 'r*' -n " + str(len(properties['replicas'])) + " --hosts " + replicaHostIps + " --tls keys")
+    executeCommand(keygen + " -p 'r*' -n " + str(len(properties['replicas'])) + " --hosts " + replicaHostIps + " --tls " + localSrcDir + "/keys")
     sendDirectoryHosts(localSrcDir + "/keys", [user + "@" + r for r in properties['replicas']], remoteProjectDir)
     sendDirectoryHosts(localSrcDir + "/keys", [user + "@" + c for c in properties['clients']], remoteProjectDir)
 
@@ -376,7 +376,7 @@ def create_config(propertyFile):
     replicas = properties['replicas']
     clients = properties['clients']
     username = properties['username']
-    data_dict = {"pacemaker": "fixed", "leader-id": 1, "view-change": 1, "leader-schedule": [1, 2, 3, 4]}
+    data_dict = {"pacemaker": "round-robin", "leader-id": 1, "view-change": 10, "view-timeout": 10000, "leader-schedule": [1, 2, 3, 4]}
     id = 1
     replicas_dict = []
     for r in replicas:
@@ -473,14 +473,45 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
     clientKey = properties['cloudlab']['client_keyname']
     replicaKey = properties['cloudlab']['replica_keyname']
 
+    latencies0 = properties['latencies0']
+    latencies1 = properties['latencies1']
+    latencies2 = properties['latencies2']
+    latencies3 = properties['latencies3']
+
     clientKeyName = clientKey
     replicaKeyName = replicaKey
 
     print("WARNING: THIS IS HACKY AND WILL NOT WORK WHEN CONFIGURING MYSQL")
     if (simulateLatency):
+        # Region 1: us-west-1 Region 2: sa-east-1 Region 3: eu-central-1 Region 4: ap-northeast-1, Ping latencies: https://www.cloudping.co/grid
         print("Simulating a " + str(simulateLatency) + " ms")
-        for replica in replicaIpList:
-            setupTC(replica, simulateLatency, replicaKey)
+        setupTCWAN(username + "@" + replicaIpList[0], latencies0, replicaIpList)
+        setupTCWAN(username + "@" + replicaIpList[1], latencies1, replicaIpList)
+        setupTCWAN(username + "@" + replicaIpList[2], latencies2, replicaIpList)
+        setupTCWAN(username + "@" + replicaIpList[3], latencies3, replicaIpList)
+        #for i in range(len(latencies0)):
+        #    if i == 0:
+        #        continue
+        #    setupTC(username + "@" + replicaIpList[0], int(latencies0[i]), [replicaIpList[i]])
+        #for i in range(len(latencies1)):
+        #    if i == 1:
+        #        continue
+        #    setupTC(username + "@" + replicaIpList[1], int(latencies1[i]), [replicaIpList[i]])
+        #for i in range(len(latencies2)):
+        #    if i == 2:
+        #        continue
+        #    setupTC(username + "@" + replicaIpList[2], int(latencies2[i]), [replicaIpList[i]])
+        #for i in range(len(latencies3)):
+        #    if i == 3:
+        #        continue
+        #    setupTC(username + "@" + replicaIpList[3], int(latencies3[i]), [replicaIpList[i]])
+        
+
+
+
+        
+        #for replica in replicaIpList:
+        #    setupTC(username + "@" + replica, simulateLatency, replicaIpList, replicaKey)
         # if (useProxy):
             #setupTC(proxy, simulateLatency, [storage], proxyKey)
             # if (useStorage):
@@ -489,8 +520,8 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
             # Hacky if condition for our oram tests without proxy
             # Because now latency has to be between multiple hostsu
             # if (useStorage):
-        for c in clientIpList:
-            setupTC(c, simulateLatency, replicaIpList, clientKey)
+        #for c in clientIpList:
+        #    setupTC(username + "@" + c, simulateLatency, replicaIpList, clientKey)
 
     first = True
     dataLoaded = False
@@ -639,7 +670,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 ## Start clients ##
                 nbMachines = len(clientIpList)
                 client_list = list()
-                
+
                 for cid in range(nbClients, 0, -1):
                     ip = clientIpList[cid % nbMachines]
                     properties['node_uid'] = str(cid)
@@ -659,7 +690,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     # cmd = "cd " + remoteExpDir + "; " + javaCommandClient + " -cp " + jarName + " " + clientMainClass + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight 500 --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight " + properties['max_inflight'] + " --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
                     t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
@@ -682,14 +713,22 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 for c in clientIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + c, "ps -ef | grep " + properties['client_main'] + " | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                            username + "@" + c, "ps -ef | grep hotstuffclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + c, "ps -ef | grep wendyecclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + c, "ps -ef | grep fastwendyecclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
                     except Exception as e:
                         print(" ")
 
                 for r in replicaIpList:
                     try:
                         executeRemoteCommandNoCheck(
-                            username + "@" + r, "ps -ef | grep " + properties['replica_main'] + " | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                            username + "@" + r, "ps -ef | grep hotstuffserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + r, "ps -ef | grep wendyecserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+                        executeRemoteCommandNoCheck(
+                            username + "@" + r, "ps -ef | grep fastwendyecserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
                     except Exception as e:
                         print(" ")
 
@@ -719,11 +758,9 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 print(str(e.returncode))
 
     # Tear down TC rules
-    # if (simulateLatency):
-        # if (useProxy):
-        #    deleteTC(proxy, storage, proxyKey)
-        # if (useStorage):
-        #    deleteTC(storage, proxy, storageKey)
+    #if (simulateLatency):
+    #    deleteTC(proxy, storage, proxyKey)
+    #    deleteTC(storage, proxy, storageKey)
 
     return expDir
 
@@ -942,7 +979,7 @@ def plotThroughputLatency(dataFileNames, outputFileName, title=None):
     for x in dataFileNames:
         data.append((x[0], x[1], 11, 1))
     plotLine(title, x_axis, y_axis, outputFileName,
-             data, False, xrightlim=120000, yrightlim=40)
+             data, False, xrightlim=2000, yrightlim=600)
 
 
 # Plots a throughput. This graph assumes the

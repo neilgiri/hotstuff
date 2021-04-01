@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"strconv"
@@ -220,55 +221,137 @@ func TestProof(t *testing.T) {
 	}
 }
 
-func BenchmarkNoCommitProof(b *testing.B) {
-	bls.Init(bls.BLS12_381)
-	bls.SetETHmode(bls.EthModeDraft07)
-	fmt.Printf("Testing Proof of no commit\n")
-
-	fmt.Printf("Generating Public/Private Key Pairs\n")
-	numKeys := 5
-	numReplicas := 4
-
-	secretKeys := make([][]bls.SecretKey, numReplicas)
-	publicKeys := make([][]bls.PublicKey, numReplicas)
-	signatures := make([]bls.Sign, numReplicas)
-	keyAggMessagePairs := make([]KeyAggMessagePair, numReplicas)
-
-	for i := 0; i < numReplicas; i++ {
-		secretKeys[i] = make([]bls.SecretKey, numKeys)
-		publicKeys[i] = make([]bls.PublicKey, numKeys)
-		for j := 0; j < numKeys; j++ {
-			var sk bls.SecretKey
-			sk.SetByCSPRNG()
-			secretKeys[i][j] = sk
-			publicKeys[i][j] = *sk.GetPublicKey()
-		}
+func BenchmarkNoCommitProofTopLevel(b *testing.B) {
+	benchmarks := []struct {
+		faulty int
+	}{
+		{1},
+		{2},
+		{4},
+		{8},
+		{16},
+		{32},
+		{64},
 	}
 
+	for _, bm := range benchmarks {
+		bls.Init(bls.BLS12_381)
+		bls.SetETHmode(bls.EthModeDraft07)
+		numReplicas := 2*bm.faulty + 1
+		numKeys := 10
+
+		secretKeys := make([][]bls.SecretKey, numReplicas)
+		publicKeys := make([][]bls.PublicKey, numReplicas)
+		signatures := make([]bls.Sign, numReplicas)
+		keyAggMessagePairs := make([]KeyAggMessagePair, numReplicas)
+
+		for i := 0; i < numReplicas; i++ {
+			secretKeys[i] = make([]bls.SecretKey, numKeys)
+			publicKeys[i] = make([]bls.PublicKey, numKeys)
+			for j := 0; j < numKeys; j++ {
+				var sk bls.SecretKey
+				sk.SetByCSPRNG()
+				secretKeys[i][j] = sk
+				publicKeys[i][j] = *sk.GetPublicKey()
+			}
+		}
+
+		var AS AggregateSignature
+
+		tView := 100
+		view := strconv.FormatInt(int64(tView), 2)
+		messages := make([]AggMessage, numReplicas)
+		for i := 0; i < numReplicas; i++ {
+			maxDifference := int(math.Pow(2, float64(numKeys)))
+			vD := 1 + rand.Intn(maxDifference)
+			cI := strconv.FormatInt(int64(vD), 2)
+			messages[i] = AggMessage{C: cI, V: view}
+			signatures[i] = AS.SignShare(secretKeys[i], messages[i])
+		}
+
+		for i := 0; i < numReplicas; i++ {
+			if !AS.VerifyShare(publicKeys[i], messages[i], signatures[i]) {
+				b.Error("AS.VerifyShare failed")
+			}
+		}
+
+		aggSig := AS.Agg(signatures)
+		for i := 0; i < numReplicas; i++ {
+			keyAggMessagePairs[i] = KeyAggMessagePair{PK: publicKeys[i], M: messages[i]}
+		}
+		b.Run(strconv.Itoa(bm.faulty),
+			func(b *testing.B) {
+				benchmarkNoCommitProof(b, aggSig, keyAggMessagePairs)
+			},
+		)
+	}
+}
+
+func benchmarkNoCommitProof(b *testing.B, aggSig bls.Sign, keyAggMessagePairs []KeyAggMessagePair) {
 	var AS AggregateSignature
-
-	view := "110"
-	messages := make([]AggMessage, numReplicas)
-	for i := 0; i < numReplicas; i++ {
-		cI := strconv.FormatInt(int64(i+1), 2)
-		messages[i] = AggMessage{C: cI, V: view}
-		signatures[i] = AS.SignShare(secretKeys[i], messages[i])
-	}
-
-	for i := 0; i < numReplicas; i++ {
-		if !AS.VerifyShare(publicKeys[i], messages[i], signatures[i]) {
-			//b.Error("AS.VerifyShare failed")
-		}
-	}
-
-	aggSig := AS.Agg(signatures)
-	for i := 0; i < numReplicas; i++ {
-		keyAggMessagePairs[i] = KeyAggMessagePair{PK: publicKeys[i], M: messages[i]}
-	}
-
 	for n := 0; n < b.N; n++ {
 		if !AS.VerifyAgg(keyAggMessagePairs, aggSig) {
 			b.Error("AS.VerifyAgg failed")
+		}
+	}
+}
+
+func BenchmarkNoCommitProofBGLSTopLevel(b *testing.B) {
+	benchmarks := []struct {
+		faulty int
+	}{
+		{1},
+		{2},
+		{4},
+		{8},
+		{16},
+		{32},
+		{64},
+	}
+
+	for _, bm := range benchmarks {
+		bls.Init(bls.BLS12_381)
+		bls.SetETHmode(bls.EthModeDraft07)
+
+		numReplicas := 2*bm.faulty + 1
+		publicKeys := make([]bls.PublicKey, numReplicas)
+		signatures := make([]bls.Sign, numReplicas)
+		messages := make([]string, numReplicas)
+		msgs := make([]byte, 32*numReplicas)
+
+		// Construct no-commit proof
+		for i := 0; i < numReplicas; i++ {
+			message := 1 + rand.Intn(int(math.Pow(2, float64(10))))
+
+			msgs[32*i] = byte(message)
+			messages[i] = strconv.Itoa(message)
+
+			var sec bls.SecretKey
+			sec.SetByCSPRNG()
+			pub := sec.GetPublicKey()
+			publicKeys[i] = *pub
+			sig := sec.SignByte(msgs[32*i : 32*i+32])
+			signatures[i] = *sig
+		}
+		for i := 0; i < numReplicas; i++ {
+			if !signatures[i].VerifyByte(&publicKeys[i], msgs[32*i:32*i+32]) {
+				b.Error("Failed verification One")
+			}
+		}
+		var aggSig bls.Sign
+		aggSig.Aggregate(signatures)
+		b.Run(strconv.Itoa(bm.faulty),
+			func(b *testing.B) {
+				benchmarkNoCommitProofBGLS(b, aggSig, publicKeys, msgs)
+			},
+		)
+	}
+}
+
+func benchmarkNoCommitProofBGLS(b *testing.B, aggSig bls.Sign, publicKeys []bls.PublicKey, msgs []byte) {
+	for n := 0; n < b.N; n++ {
+		if !aggSig.AggregateVerifyNoCheck(publicKeys, msgs) {
+			b.Error("Failed verification Two")
 		}
 	}
 }

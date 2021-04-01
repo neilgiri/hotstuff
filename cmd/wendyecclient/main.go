@@ -177,9 +177,9 @@ func main() {
 	} else {
 		commandStats := client.data.GetStats()
 		for _, cmd := range commandStats {
-			latency := float64(cmd.Duration.GetNanos())
-			commandLatency := latency / 1000000.0
-			fmt.Printf("%.4f %.4f %.4f\n", commandLatency, commandLatency, commandLatency)
+			latency := float64(cmd.GetDuration().GetNanos())
+			commandLatency := latency / float64(time.Millisecond)
+			fmt.Printf("%.2f %.2f %.2f\n", commandLatency, commandLatency, commandLatency)
 		}
 		/*client.data.MeasuredThroughput = throughput
 		client.data.MeasuredLatency = latency

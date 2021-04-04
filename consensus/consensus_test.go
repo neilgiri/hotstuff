@@ -9,6 +9,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	. "github.com/relab/hotstuff/config"
+	"github.com/relab/hotstuff/data"
 	. "github.com/relab/hotstuff/data"
 )
 
@@ -610,4 +611,145 @@ func TestOnReciveViewChangeWendyECNack(t *testing.T) {
 		t.Error("Expected proofNC to be accepted")
 	}
 	wendy.OnReceiveVote(pc)
+}
+
+func TestCheckViewChangeFastWendyEC(t *testing.T) {
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+
+	key, _ := GeneratePrivateKey()
+	cfg := NewConfigFastWendy(1, key, nil)
+	cfg.QuorumSize = 0
+	cfg.BatchSize = 1
+
+	numKeys := 4
+	secretKeys := make([]bls.SecretKey, numKeys)
+	secretKeys2 := make([]bls.SecretKey, numKeys)
+	publicKeys := make([]bls.PublicKey, numKeys)
+	publicKeys2 := make([]bls.PublicKey, numKeys)
+
+	for i := 0; i < numKeys; i++ {
+		var sk bls.SecretKey
+		sk.SetByCSPRNG()
+		pk := sk.GetPublicKey()
+		secretKeys[i] = sk
+		publicKeys[i] = *pk
+
+		var sk2 bls.SecretKey
+		sk2.SetByCSPRNG()
+		pk2 := sk2.GetPublicKey()
+		secretKeys2[i] = sk2
+		publicKeys2[i] = *pk2
+	}
+
+	cfg.Replicas[1] = &ReplicaInfoWendy{ID: 1,
+		Address:      "123",
+		PubKey:       &key.PublicKey,
+		ProofPubKeys: publicKeys}
+	cfg.Replicas[2] = &ReplicaInfoWendy{ID: 2,
+		Address:      "124",
+		PubKey:       &key.PublicKey,
+		ProofPubKeys: publicKeys2}
+
+	wendy := NewFastWendyEC(cfg)
+	block1 := CreateLeafFastWendy(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+	wendy.Blocks.Put(block1)
+	qcBlock1 := CreateQuorumCertFastWendy(block1)
+	wendy.OnReceiveProposal(block1)
+
+	block2 := CreateLeafFastWendy(block1, nil, nil, block1.Height+1)
+	wendy.Blocks.Put(block2)
+	var AS data.AggregateSignature
+
+	msg := data.AggMessage{C: strconv.FormatInt(2, 2), V: strconv.FormatInt(int64(block2.Height+1), 2)}
+	sig := AS.SignShare(secretKeys, msg)
+
+	weakLock := CreateQuorumCertFastWendy(block1)
+	vote, _ := CreatePartialCertFastWendy(1, key, block1)
+	msg1 := data.AggMessage{C: strconv.FormatInt(2, 2), V: strconv.FormatInt(int64(block2.Height+1), 2)}
+	sig1 := AS.SignShare(secretKeys, msg1)
+
+	newViewMsg := data.NewViewMsgFastWendy{LockCertificate: qcBlock1, Message: msg, Signature: sig, ID: 1,
+		WeakLockCertificate: weakLock, MessageWeakLock: msg1, SignatureWeakLock: sig1, Vote: vote}
+	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)] = make([]NewViewMsgFastWendy, 1)
+	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)][0] = newViewMsg
+
+	wendy.cmdCache.Add(Command("command3"))
+	wendy.bLeaf = block2
+	block3 := wendy.CreateProposal()
+	wendy.Blocks.Put(block3)
+
+	if !wendy.CheckViewChange(block3) {
+		t.Errorf("Check VC failed")
+	}
+}
+func TestCheckViewChange2FastWendyEC(t *testing.T) {
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+
+	key, _ := GeneratePrivateKey()
+	cfg := NewConfigFastWendy(1, key, nil)
+	cfg.QuorumSize = 0
+	cfg.BatchSize = 1
+
+	numKeys := 4
+	secretKeys := make([]bls.SecretKey, numKeys)
+	secretKeys2 := make([]bls.SecretKey, numKeys)
+	publicKeys := make([]bls.PublicKey, numKeys)
+	publicKeys2 := make([]bls.PublicKey, numKeys)
+
+	for i := 0; i < numKeys; i++ {
+		var sk bls.SecretKey
+		sk.SetByCSPRNG()
+		pk := sk.GetPublicKey()
+		secretKeys[i] = sk
+		publicKeys[i] = *pk
+
+		var sk2 bls.SecretKey
+		sk2.SetByCSPRNG()
+		pk2 := sk2.GetPublicKey()
+		secretKeys2[i] = sk2
+		publicKeys2[i] = *pk2
+	}
+
+	cfg.Replicas[1] = &ReplicaInfoWendy{ID: 1,
+		Address:      "123",
+		PubKey:       &key.PublicKey,
+		ProofPubKeys: publicKeys}
+	cfg.Replicas[2] = &ReplicaInfoWendy{ID: 2,
+		Address:      "124",
+		PubKey:       &key.PublicKey,
+		ProofPubKeys: publicKeys2}
+
+	wendy := NewFastWendyEC(cfg)
+	block1 := CreateLeafFastWendy(wendy.genesis, []Command{Command("command1")}, wendy.qcHigh, wendy.genesis.Height+1)
+	wendy.Blocks.Put(block1)
+	qcBlock1 := CreateQuorumCertFastWendy(block1)
+	wendy.OnReceiveProposal(block1)
+
+	block2 := CreateLeafFastWendy(block1, nil, nil, block1.Height+1)
+	wendy.Blocks.Put(block2)
+	var AS data.AggregateSignature
+
+	msg := data.AggMessage{C: strconv.FormatInt(2, 2), V: strconv.FormatInt(int64(block2.Height+1), 2)}
+	sig := AS.SignShare(secretKeys, msg)
+
+	weakLock := CreateQuorumCertFastWendy(block1)
+	vote, _ := CreatePartialCertFastWendy(1, key, block1)
+	msg1 := data.AggMessage{C: strconv.FormatInt(2, 2), V: strconv.FormatInt(int64(block2.Height+1), 2)}
+	sig1 := AS.SignShare(secretKeys, msg1)
+
+	newViewMsg := data.NewViewMsgFastWendy{LockCertificate: qcBlock1, Message: msg, Signature: sig, ID: 1,
+		WeakLockCertificate: weakLock, MessageWeakLock: msg1, SignatureWeakLock: sig1, Vote: vote}
+	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)] = make([]NewViewMsgFastWendy, 1)
+	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)][0] = newViewMsg
+
+	wendy.cmdCache.Add(Command("command3"))
+	wendy.bLeaf = block2
+	block3 := wendy.CreateProposal()
+	wendy.Blocks.Put(block3)
+
+	if !wendy.CheckViewChange(block3) {
+		t.Errorf("Check VC failed")
+	}
 }

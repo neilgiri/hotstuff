@@ -46,9 +46,12 @@ type HotStuff struct {
 
 	nodes map[config.ReplicaID]*proto.Node
 
-	server  *hotstuffServer
-	manager *proto.Manager
-	cfg     *proto.Configuration
+	server        *hotstuffServer
+	manager       *proto.Manager
+	cfg           *proto.Configuration
+	vcCfg         *proto.Configuration
+	vcCfg1        *proto.Configuration
+	viewBenchmark int
 
 	closeOnce sync.Once
 
@@ -57,13 +60,14 @@ type HotStuff struct {
 }
 
 //New creates a new GorumsHotStuff backend object.
-func New(conf *config.ReplicaConfig, pacemaker Pacemaker, tls bool, connectTimeout, qcTimeout time.Duration) *HotStuff {
+func New(conf *config.ReplicaConfig, pacemaker Pacemaker, tls bool, connectTimeout, qcTimeout time.Duration, viewBenchmark int) *HotStuff {
 	hs := &HotStuff{
 		pacemaker:      pacemaker,
 		HotStuffCore:   consensus.New(conf),
 		nodes:          make(map[config.ReplicaID]*proto.Node),
 		connectTimeout: connectTimeout,
 		qcTimeout:      qcTimeout,
+		viewBenchmark:  viewBenchmark,
 	}
 	pacemaker.Init(hs)
 	return hs
@@ -143,6 +147,16 @@ func (hs *HotStuff) startClient(connectTimeout time.Duration) error {
 		return fmt.Errorf("Failed to create configuration: %w", err)
 	}
 
+	hs.vcCfg, err = hs.manager.NewConfiguration(hs.manager.NodeIDs()[:hs.Config.QuorumSize-2], &struct{}{})
+	if err != nil {
+		return fmt.Errorf("Failed to create view change configuration: %w", err)
+	}
+
+	hs.vcCfg1, err = hs.manager.NewConfiguration(hs.manager.NodeIDs()[hs.Config.QuorumSize-2:], &struct{}{})
+	if err != nil {
+		return fmt.Errorf("Failed to create view change configuration: %w", err)
+	}
+
 	return nil
 }
 
@@ -183,13 +197,23 @@ func (hs *HotStuff) Propose() {
 	proposal := hs.CreateProposal()
 	logger.Printf("Propose (%d commands): %s\n", len(proposal.Commands), proposal)
 	protobuf := proto.BlockToProto(proposal)
-	hs.cfg.Propose(protobuf)
+
+	if hs.viewBenchmark > 0 && hs.GetHeight() > 0 && hs.GetHeight()%hs.viewBenchmark == 0 {
+		//fmt.Printf("Height %d %d\n", hs.GetHeight(), hs.viewBenchmark)
+		hs.vcCfg.Propose(protobuf)
+	} else {
+		//fmt.Printf("Height %d\n", hs.GetHeight())
+		hs.cfg.Propose(protobuf)
+		hs.handlePropose(proposal)
+	}
+
 	// self-vote
-	hs.handlePropose(proposal)
+	//hs.handlePropose(proposal)
 }
 
 // SendNewView sends a NEW-VIEW message to a specific replica
 func (hs *HotStuff) SendNewView(id config.ReplicaID) {
+	//fmt.Printf("1\n")
 	qc := hs.GetQCHigh()
 	if node, ok := hs.nodes[id]; ok {
 		node.NewView(proto.QuorumCertToProto(qc))

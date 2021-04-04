@@ -1583,7 +1583,7 @@ func (wendyEC *FastWendyCoreEC) CheckViewChange(block *data.BlockFastWendy) bool
 
 	for _, msg := range block.LockProofNC.Messages {
 		vD, _ := strconv.ParseInt(msg.M.C, 2, 64)
-		if lockVd < vD {
+		if vD < lockVd {
 			lockVd = vD
 		}
 		targetView, _ = strconv.ParseInt(msg.M.V, 2, 64)
@@ -1593,7 +1593,7 @@ func (wendyEC *FastWendyCoreEC) CheckViewChange(block *data.BlockFastWendy) bool
 
 	for _, msg := range block.WeakLockProofNC.Messages {
 		vD, _ := strconv.ParseInt(msg.M.C, 2, 64)
-		if weakLockVd < vD {
+		if vD < weakLockVd {
 			weakLockVd = vD
 		}
 		targetView, _ = strconv.ParseInt(msg.M.V, 2, 64)
@@ -1943,12 +1943,12 @@ func (wendyEC *FastWendyCoreEC) CreateProposal() *data.BlockFastWendy {
 		proofNCLock := AS.Agg(lockSigs)
 		proofNCWeakLock := AS.Agg(weakLockSigs)
 
-		pairsLock := make([]data.KeyAggMessagePair, len(lockSigs))
+		pairsLock := make([]data.KeyAggMessagePair, len(msgs))
 		for i := 0; i < len(pairsLock); i++ {
 			pairsLock[i] = data.KeyAggMessagePair{PK: wendyEC.Config.Replicas[msgs[i].ID].ProofPubKeys, M: msgs[i].Message}
 		}
 
-		pairsWeakLock := make([]data.KeyAggMessagePair, len(lockSigs))
+		pairsWeakLock := make([]data.KeyAggMessagePair, len(msgs))
 		for i := 0; i < len(pairsWeakLock); i++ {
 			pairsWeakLock[i] = data.KeyAggMessagePair{PK: wendyEC.Config.Replicas[msgs[i].ID].ProofPubKeys, M: msgs[i].MessageWeakLock}
 		}
@@ -1957,8 +1957,10 @@ func (wendyEC *FastWendyCoreEC) CreateProposal() *data.BlockFastWendy {
 		weakLockProof := data.ProofNC{Messages: pairsWeakLock, Signature: proofNCWeakLock, Hash: wendyEC.bLeaf.Hash()}
 
 		b = CreateLeafFastWendyNonDefault(wendyEC.bLeaf, batch, wendyEC.qcHigh, wendyEC.bLeaf.Height+1, lockProof, highLock, weakLockProof, highWeakLock, vote)
+	} else {
+		b = CreateLeafFastWendy(wendyEC.bLeaf, batch, wendyEC.qcHigh, wendyEC.bLeaf.Height+1)
 	}
-	b = CreateLeafFastWendy(wendyEC.bLeaf, batch, wendyEC.qcHigh, wendyEC.bLeaf.Height+1)
+
 	wendyEC.mut.Unlock()
 	b.Proposer = wendyEC.Config.ID
 	wendyEC.Blocks.Put(b)

@@ -621,7 +621,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     #    "/proxy_err" + str(sid) + ".og"
 
                     id = sid - nbClients
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandReplica + " --self-id " + str(id) + " --privkey keys/r" + str(id) + ".key --batch-size 100 --cpuprofile cpuprofile.out 1> " + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandReplica + " --self-id " + str(id) + " --privkey keys/r" + str(id) + ".key --batch-size " + properties['batch_size'] + " --cpuprofile cpuprofile.out 1> " + \
                         remotePath + "/replica_" + replica + "_" + \
                         str(sid) + ".log"
                     sid += 1
@@ -690,7 +690,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     # cmd = "cd " + remoteExpDir + "; " + javaCommandClient + " -cp " + jarName + " " + clientMainClass + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight " + properties['max_inflight'] + " --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --self-id " + str(cid) + " --max-inflight " + properties['max_inflight'] + " --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
                     t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
@@ -979,7 +979,7 @@ def plotThroughputLatency(dataFileNames, outputFileName, title=None):
     for x in dataFileNames:
         data.append((x[0], x[1], 11, 1))
     plotLine(title, x_axis, y_axis, outputFileName,
-             data, False, xrightlim=2000, yrightlim=600)
+             data, False, xrightlim=800, yrightlim=1000)
 
 
 # Plots a throughput. This graph assumes the

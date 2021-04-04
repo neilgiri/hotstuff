@@ -9,21 +9,21 @@
   "backing_store_type": "noram_hashmap",
   "batch_size": "100",
   "cc_manager_type": "nobatch",
-  "client_machines": "5",
+  "client_machines": "4",
   "client_type": "shield",
-  "clientmain": "wendyecclient",
+  "clientmain": "hotstuffclient",
   "clients": [
-    "128.110.153.125",
-    "128.110.153.203",
-    "128.110.153.217",
-    "128.110.153.199"
+    "128.110.152.120",
+    "128.110.152.108",
+    "128.110.152.110",
+    "128.110.152.122"
   ],
   "cloudlab": {
     "client_ami": "ami-802e1ae5",
     "client_ami_useast1": "ami-e409e099",
     "client_availability": "cl-utah",
     "client_disk_img": "urn:publicid:IDN+emulab.net+image+emulab-ops//UBUNTU20-64-STD",
-    "client_inst_type": "m510",
+    "client_inst_type": "m400",
     "client_keyname": "/Users/neilgiridharan/.ssh/id_ed25519",
     "client_region": "cl-utah",
     "client_sec": "launch-wizard",
@@ -31,7 +31,7 @@
     "replica_ami": "ami-802e1ae5",
     "replica_availability": "cl-utah",
     "replica_disk_img": "urn:publicid:IDN+emulab.net+image+emulab-ops//UBUNTU20-64-STD",
-    "replica_inst_type": "m510",
+    "replica_inst_type": "m400",
     "replica_keyname": "/Users/neilgiridharan/.ssh/id_ed25519",
     "replica_region": "cl-utah",
     "replica_sec": "launch-wizard",
@@ -48,13 +48,13 @@
   "exp_dir": "default",
   "exp_length": "60",
   "experiment_dir": "experiments",
-  "experimentname": "testExperiment12",
+  "experimentname": "testExperiment5",
   "expiration": "960",
   "finalise_batch_buffer_t": "10",
   "gc_activated": "false",
-  "gocommandclient": "cmd/wendyecclient/wendyecclient",
-  "gocommandreplica": "cmd/wendyecserver/wendyecserver",
-  "gokeygen": "cmd/wendyeckeygen/wendyeckeygen",
+  "gocommandclient": "cmd/hotstuffclient/hotstuffclient",
+  "gocommandreplica": "cmd/hotstuffserver/hotstuffserver",
+  "gokeygen": "cmd/hotstuffkeygen/hotstuffkeygen",
   "jar": "shield-1.0-SNAPSHOT.jar",
   "javacommandclient": "java -ea -XX:+UseConcMarkSweepGC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime",
   "javacommandclientlarge": "java -ea -Xss515m -Xms4g -Xmx6g -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:+PrintGCDetails -XX:+PrintGCTimeStamps",
@@ -64,28 +64,28 @@
   "key_size": "16",
   "kv_name": "kvstore",
   "latencies0": [
-    "0",
+    "1",
     "179",
     "150",
     "114"
   ],
   "latencies1": [
     "179",
-    "0",
+    "1",
     "206",
     "258"
   ],
   "latencies2": [
     "150",
     "206",
-    "0",
+    "1",
     "224"
   ],
   "latencies3": [
     "114",
     "258",
     "224",
-    "0"
+    "1"
   ],
   "loadermain": "shield.benchmarks.ycsb.StartYCSBLoader",
   "localprojectdir": "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff",
@@ -98,7 +98,7 @@
   "n_receiver_net_threads": "1",
   "n_sender_net_threads": "1",
   "n_worker_threads": "16",
-  "name": "testExperiment12",
+  "name": "testExperiment5",
   "nb_client_threads": "1",
   "nb_keys": "1000",
   "nb_loader_threads": "1",
@@ -109,7 +109,8 @@
     "2",
     "4",
     "6",
-    "8"
+    "8",
+    "10"
   ],
   "oram_a": "8",
   "oram_batch_size": "0",
@@ -130,12 +131,12 @@
   "remoteprojectdir": "/users/giridhn/hotstuff-master",
   "replica_ip_address": "100.0.0.1",
   "replica_machines": "4",
-  "replicamain": "wendyecserver",
+  "replicamain": "hotstuffserver",
   "replicas": [
-    "128.110.153.239",
-    "128.110.153.155",
-    "128.110.154.78",
-    "128.110.153.219"
+    "128.110.152.95",
+    "128.110.152.101",
+    "128.110.152.107",
+    "128.110.152.121"
   ],
   "run_name": "trx.dat",
   "simulate_latency": "50",

@@ -1,32 +1,33 @@
 pacemaker = "fixed"
-leader-id = 1
-view-change = 1
+leader-id = 3
+view-change = 100
+view-timeout = 10000
 leader-schedule = [ 1, 2, 3, 4,]
 [[replicas]]
 id = "1"
-peer-address = "128.110.153.198:13371"
-client-address = "128.110.153.198:23371"
+peer-address = "128.110.152.95:13371"
+client-address = "128.110.152.95:23371"
 pubkey = "keys/r1.key.pub"
 cert = "keys/r1.crt"
 
 [[replicas]]
 id = "2"
-peer-address = "128.110.153.156:13371"
-client-address = "128.110.153.156:23371"
+peer-address = "128.110.152.101:13371"
+client-address = "128.110.152.101:23371"
 pubkey = "keys/r2.key.pub"
 cert = "keys/r2.crt"
 
 [[replicas]]
 id = "3"
-peer-address = "128.110.153.228:13371"
-client-address = "128.110.153.228:23371"
+peer-address = "128.110.152.107:13371"
+client-address = "128.110.152.107:23371"
 pubkey = "keys/r3.key.pub"
 cert = "keys/r3.crt"
 
 [[replicas]]
 id = "4"
-peer-address = "128.110.153.174:13371"
-client-address = "128.110.153.174:23371"
+peer-address = "128.110.152.121:13371"
+client-address = "128.110.152.121:23371"
 pubkey = "keys/r4.key.pub"
 cert = "keys/r4.crt"
 

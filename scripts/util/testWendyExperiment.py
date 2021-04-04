@@ -16,10 +16,10 @@ import cloudlab_util
 #wendyExperiment.cleanupCloudlab('config/test.json')
 #wendyExperiment.setupCloudlab('config/test.json')
 #localPath = wendyExperiment.setup('config/test.json')
-wendyExperiment.create_config('config/test.json')
+#wendyExperiment.create_config('config/test.json')
 wendyExperiment.run('config/test.json')
 wendyExperiment.calculateParallel('config/test.json', None)
-localPath = "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experiments/testExperiment12"
+localPath = "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experiments/testExperiment5"
 dataFile = localPath + "/hotstuff.dat"
 outputDataFile = localPath + "/result.pdf"
 data = list()

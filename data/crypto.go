@@ -647,6 +647,17 @@ func CreatePartialCert(id config.ReplicaID, privKey *ecdsa.PrivateKey, block *Bl
 	return &PartialCert{sig, hash}, nil
 }
 
+// CreatePartialCert creates a partial cert from a block.
+func CreatePartialCertFastWendy(id config.ReplicaID, privKey *ecdsa.PrivateKey, block *BlockFastWendy) (*PartialCert, error) {
+	hash := block.Hash()
+	r, s, err := ecdsa.Sign(rand.Reader, privKey, hash[:])
+	if err != nil {
+		return nil, err
+	}
+	sig := PartialSig{id, r, s}
+	return &PartialCert{sig, hash}, nil
+}
+
 // CreatePartialCertBls creates a partial cert from a block.
 func CreatePartialCertBls(id config.ReplicaID, privKey *bls.SecretKey, block *BlockBls) (*PartialCertBls, error) {
 	hash := block.Hash()

@@ -42,6 +42,7 @@ type options struct {
 	ViewChange      int                `mapstructure:"view-change"`
 	ViewTimeout     int                `mapstructure:"view-timeout"`
 	BatchSize       int                `mapstructure:"batch-size"`
+	ViewBenchmark   int                `mapstructure:"view-benchmark"`
 	PrintThroughput bool               `mapstructure:"print-throughput"`
 	PrintCommands   bool               `mapstructure:"print-commands"`
 	ClientAddr      string             `mapstructure:"client-listen"`
@@ -83,6 +84,7 @@ func main() {
 	pflag.Uint32("self-id", 0, "The id for this replica.")
 	pflag.Int("view-change", 100, "How many views before leader change with round-robin pacemaker")
 	pflag.Int("batch-size", 100, "How many commands are batched together for each proposal")
+	pflag.Int("view-benchmark", 0, "How often view changes are triggered")
 	pflag.Int("view-timeout", 1000, "How many milliseconds before a view is timed out")
 	pflag.String("privkey", "", "The path to the private key file")
 	pflag.String("cert", "", "Path to the certificate")
@@ -324,7 +326,7 @@ func newHotStuffServer(conf *options, replicaConfig *config.ReplicaConfig) *hots
 		fmt.Fprintf(os.Stderr, "Invalid pacemaker type: '%s'\n", conf.PmType)
 		os.Exit(1)
 	}
-	srv.hs = hotstuff.New(replicaConfig, pm, conf.TLS, time.Minute, time.Duration(conf.ViewTimeout)*time.Millisecond)
+	srv.hs = hotstuff.New(replicaConfig, pm, conf.TLS, time.Minute, time.Duration(conf.ViewTimeout)*time.Millisecond, conf.ViewBenchmark)
 	srv.pm = pm.(interface{ Run(context.Context) })
 	// Use a custom server instead of the gorums one
 	srv.gorumsSrv.RegisterClientServer(srv)

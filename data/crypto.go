@@ -83,13 +83,26 @@ func (AS *AggregateSignature) KGen(sk *bls.SecretKey, pk *bls.PublicKey, pop *bl
 // SignShare verifies a partial signature
 func (AS *AggregateSignature) SignShare(sk []bls.SecretKey, m AggMessage) bls.Sign {
 	sigs := make([]bls.Sign, len(sk))
-	i := 0
+	/*i := 0
 	var signature bls.Sign
 	for j, _ := range m.C {
 		sigs[i] = *sk[j].Sign(m.V)
 		i++
 	}
 
+	signature.Aggregate(sigs)
+	return signature*/
+
+	var wg sync.WaitGroup
+	var signature bls.Sign
+	for j, _ := range m.C {
+		wg.Add(1)
+		go func(j int) {
+			sigs[j] = *sk[j].Sign(m.V)
+			wg.Done()
+		}(j)
+	}
+	wg.Wait()
 	signature.Aggregate(sigs)
 	return signature
 }

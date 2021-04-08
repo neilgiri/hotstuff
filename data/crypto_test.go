@@ -223,22 +223,23 @@ func TestProof(t *testing.T) {
 
 func BenchmarkNoCommitProofTopLevel(b *testing.B) {
 	benchmarks := []struct {
-		faulty int
+		faulty  int
+		numKeys int
 	}{
-		{1},
-		{2},
-		{4},
-		{8},
-		{16},
-		{32},
-		{64},
+		{1, 6},
+		{2, 6},
+		{4, 6},
+		{8, 6},
+		{16, 6},
+		{32, 6},
+		{64, 6},
 	}
 
 	for _, bm := range benchmarks {
 		bls.Init(bls.BLS12_381)
 		bls.SetETHmode(bls.EthModeDraft07)
 		numReplicas := 2*bm.faulty + 1
-		numKeys := 10
+		numKeys := bm.numKeys
 
 		secretKeys := make([][]bls.SecretKey, numReplicas)
 		publicKeys := make([][]bls.PublicKey, numReplicas)
@@ -263,7 +264,7 @@ func BenchmarkNoCommitProofTopLevel(b *testing.B) {
 		messages := make([]AggMessage, numReplicas)
 		for i := 0; i < numReplicas; i++ {
 			maxDifference := int(math.Pow(2, float64(numKeys)))
-			vD := 1 + rand.Intn(maxDifference)
+			vD := rand.Intn(maxDifference)
 			cI := strconv.FormatInt(int64(vD), 2)
 			messages[i] = AggMessage{C: cI, V: view}
 			signatures[i] = AS.SignShare(secretKeys[i], messages[i])
@@ -287,6 +288,84 @@ func BenchmarkNoCommitProofTopLevel(b *testing.B) {
 	}
 }
 
+func BenchmarkNoCommitProofVdTopLevel(b *testing.B) {
+	benchmarks := []struct {
+		faulty  int
+		numKeys int
+	}{
+		{64, 1},
+		{64, 2},
+		{64, 3},
+		{64, 4},
+		{64, 5},
+		{64, 6},
+		{64, 7},
+		{64, 8},
+		{64, 9},
+		{64, 10},
+	}
+
+	for _, bm := range benchmarks {
+		bls.Init(bls.BLS12_381)
+		bls.SetETHmode(bls.EthModeDraft07)
+		numReplicas := 2*bm.faulty + 1
+		numKeys := bm.numKeys
+
+		secretKeys := make([][]bls.SecretKey, numReplicas)
+		publicKeys := make([][]bls.PublicKey, numReplicas)
+		signatures := make([]bls.Sign, numReplicas)
+		keyAggMessagePairs := make([]KeyAggMessagePair, numReplicas)
+
+		for i := 0; i < numReplicas; i++ {
+			secretKeys[i] = make([]bls.SecretKey, numKeys)
+			publicKeys[i] = make([]bls.PublicKey, numKeys)
+			for j := 0; j < numKeys; j++ {
+				var sk bls.SecretKey
+				sk.SetByCSPRNG()
+				secretKeys[i][j] = sk
+				publicKeys[i][j] = *sk.GetPublicKey()
+			}
+		}
+
+		var AS AggregateSignature
+
+		tView := 100
+		view := strconv.FormatInt(int64(tView), 2)
+		messages := make([]AggMessage, numReplicas)
+		for i := 0; i < numReplicas; i++ {
+			maxDifference := int(math.Pow(2, float64(numKeys)))
+			//vD := rand.Intn(maxDifference)
+			cI := strconv.FormatInt(int64(maxDifference-1), 2)
+			messages[i] = AggMessage{C: cI, V: view}
+			//fmt.Printf("# of replicas %s\n", cI)
+			signatures[i] = AS.SignShare(secretKeys[i], messages[i])
+		}
+
+		for i := 0; i < numReplicas; i++ {
+			if !AS.VerifyShare(publicKeys[i], messages[i], signatures[i]) {
+				b.Error("AS.VerifyShare failed")
+			}
+		}
+
+		//aggSig := AS.Agg(signatures)
+		for i := 0; i < numReplicas; i++ {
+			keyAggMessagePairs[i] = KeyAggMessagePair{PK: publicKeys[i], M: messages[i]}
+		}
+		b.Run(strconv.Itoa(bm.faulty),
+			func(b *testing.B) {
+				benchmarkSign(b, secretKeys[0], messages[0])
+			},
+		)
+	}
+}
+
+func benchmarkSign(b *testing.B, sk []bls.SecretKey, message AggMessage) {
+	var AS AggregateSignature
+	for n := 0; n < b.N; n++ {
+		AS.SignShare(sk, message)
+	}
+}
+
 func benchmarkNoCommitProof(b *testing.B, aggSig bls.Sign, keyAggMessagePairs []KeyAggMessagePair) {
 	var AS AggregateSignature
 	for n := 0; n < b.N; n++ {
@@ -298,15 +377,16 @@ func benchmarkNoCommitProof(b *testing.B, aggSig bls.Sign, keyAggMessagePairs []
 
 func BenchmarkNoCommitProofBGLSTopLevel(b *testing.B) {
 	benchmarks := []struct {
-		faulty int
+		faulty  int
+		numKeys int
 	}{
-		{1},
-		{2},
-		{4},
-		{8},
-		{16},
-		{32},
-		{64},
+		{1, 6},
+		{2, 6},
+		{4, 6},
+		{8, 6},
+		{16, 6},
+		{32, 6},
+		{64, 6},
 	}
 
 	for _, bm := range benchmarks {
@@ -321,7 +401,7 @@ func BenchmarkNoCommitProofBGLSTopLevel(b *testing.B) {
 
 		// Construct no-commit proof
 		for i := 0; i < numReplicas; i++ {
-			message := 1 + rand.Intn(int(math.Pow(2, float64(10))))
+			message := rand.Intn(int(math.Pow(2, float64(bm.numKeys))))
 
 			msgs[32*i] = byte(message)
 			messages[i] = strconv.Itoa(message)
@@ -345,6 +425,70 @@ func BenchmarkNoCommitProofBGLSTopLevel(b *testing.B) {
 				benchmarkNoCommitProofBGLS(b, aggSig, publicKeys, msgs)
 			},
 		)
+	}
+}
+
+func BenchmarkNoCommitProofBGLSVdTopLevel(b *testing.B) {
+	benchmarks := []struct {
+		faulty  int
+		numKeys int
+	}{
+		{64, 1},
+		{64, 2},
+		{64, 3},
+		{64, 4},
+		{64, 5},
+		{64, 6},
+		{64, 7},
+		{64, 8},
+		{64, 9},
+		{64, 10},
+	}
+
+	for _, bm := range benchmarks {
+		bls.Init(bls.BLS12_381)
+		bls.SetETHmode(bls.EthModeDraft07)
+
+		numReplicas := 2*bm.faulty + 1
+		publicKeys := make([]bls.PublicKey, numReplicas)
+		signatures := make([]bls.Sign, numReplicas)
+		messages := make([]string, numReplicas)
+		msgs := make([]byte, 32*numReplicas)
+
+		// Construct no-commit proof
+		for i := 0; i < numReplicas; i++ {
+			message := rand.Intn(int(math.Pow(2, float64(bm.numKeys))))
+
+			msgs[32*i] = byte(message)
+			messages[i] = strconv.Itoa(message)
+
+			var sec bls.SecretKey
+			sec.SetByCSPRNG()
+			pub := sec.GetPublicKey()
+			publicKeys[i] = *pub
+			sig := sec.SignByte(msgs[32*i : 32*i+32])
+			signatures[i] = *sig
+		}
+		for i := 0; i < numReplicas; i++ {
+			if !signatures[i].VerifyByte(&publicKeys[i], msgs[32*i:32*i+32]) {
+				b.Error("Failed verification One")
+			}
+		}
+		var aggSig bls.Sign
+		aggSig.Aggregate(signatures)
+		var sec bls.SecretKey
+		sec.SetByCSPRNG()
+		b.Run(strconv.Itoa(bm.faulty),
+			func(b *testing.B) {
+				benchmarkBGLSVd(b, sec, msgs)
+			},
+		)
+	}
+}
+
+func benchmarkBGLSVd(b *testing.B, sec bls.SecretKey, msgs []byte) {
+	for n := 0; n < b.N; n++ {
+		sec.SignByte(msgs[32 : 32+32])
 	}
 }
 

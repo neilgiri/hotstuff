@@ -73,17 +73,21 @@ type NackMsg struct {
 type AggregateSignature struct {
 }
 
+// KGen gets secret keys
+func (AS *AggregateSignature) KGen(sk *bls.SecretKey, pk *bls.PublicKey, pop *bls.Sign) {
+	sk.SetByCSPRNG()
+	pk = sk.GetPublicKey()
+	pop = sk.GetPop()
+}
+
 // SignShare verifies a partial signature
 func (AS *AggregateSignature) SignShare(sk []bls.SecretKey, m AggMessage) bls.Sign {
 	sigs := make([]bls.Sign, len(sk))
 	i := 0
 	var signature bls.Sign
-	for j, b := range m.C {
-		bit := int(b - '0')
-		if bit == 1 {
-			sigs[i] = *sk[j].Sign(m.V)
-			i++
-		}
+	for j, _ := range m.C {
+		sigs[i] = *sk[j].Sign(m.V)
+		i++
 	}
 
 	signature.Aggregate(sigs)
@@ -94,12 +98,9 @@ func (AS *AggregateSignature) SignShare(sk []bls.SecretKey, m AggMessage) bls.Si
 func (AS *AggregateSignature) VerifyShare(pk []bls.PublicKey, m AggMessage, sig bls.Sign) bool {
 	publicKeys := make([]bls.PublicKey, len(pk))
 	i := 0
-	for j, b := range m.C {
-		bit := int(b - '0')
-		if bit == 1 {
-			publicKeys[i] = pk[j]
-			i++
-		}
+	for j, _ := range m.C {
+		publicKeys[i] = pk[j]
+		i++
 	}
 	return sig.FastAggregateVerify(publicKeys, []byte(m.V))
 }
@@ -118,12 +119,9 @@ func (AS *AggregateSignature) VerifyAgg(keyMessagePairs []KeyAggMessagePair, sig
 	publicKeys := make([]bls.PublicKey, len(keyMessagePairs)*len(firstPair.PK))
 
 	for _, pair := range keyMessagePairs {
-		for j, b := range pair.M.C {
-			bit := int(b - '0')
-			if bit == 1 {
-				publicKeys[i] = pair.PK[j]
-				i++
-			}
+		for j, _ := range pair.M.C {
+			publicKeys[i] = pair.PK[j]
+			i++
 		}
 	}
 	return sig.FastAggregateVerify(publicKeys, []byte(firstPair.M.V))

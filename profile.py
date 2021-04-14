@@ -20,11 +20,13 @@ lan = request.LAN()
 
 for i in range(num_nodes):
     node = request.RawPC("node" + str(i))
+    node.hardware_type = "m510"
     iface = node.addInterface("if" + str(i))
+    iface.component_id = "eth" + str(i + 1)
     iface.addAddress(rspec.IPv4Address("192.168.1." + str(i + 1), "255.255.255.0"))
     lan.addInterface(iface)
-    node.addService(rspec.Install(url="https://golang.org/dl/go1.15.7.linux-amd64.tar.gz", path="/local"))
-    node.addService(rspec.Execute(shell="bash", command="/local/repository/scripts/install_go.sh"))
+    node.addService(rspec.Install(url="https://github.com/neilgiri/hotstuff/archive/master.tar.gz", path="/users/giridhn"))
+    node.addService(rspec.Execute(shell="bash", command="sudo tar -C /users/giridhn -xvzf /users/giridhn/hotstuff-master.tar.gz ; sudo apt-get update ; sudo apt-get install --yes golang-go"))
 
 
 # Print the RSpec to the enclosing page.

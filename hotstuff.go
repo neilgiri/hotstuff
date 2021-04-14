@@ -147,12 +147,12 @@ func (hs *HotStuff) startClient(connectTimeout time.Duration) error {
 		return fmt.Errorf("Failed to create configuration: %w", err)
 	}
 
-	hs.vcCfg, err = hs.manager.NewConfiguration(hs.manager.NodeIDs()[:hs.Config.QuorumSize-2], &struct{}{})
+	hs.vcCfg, err = hs.manager.NewConfiguration(hs.manager.NodeIDs()[0:hs.Config.QuorumSize-1], &struct{}{})
 	if err != nil {
 		return fmt.Errorf("Failed to create view change configuration: %w", err)
 	}
 
-	hs.vcCfg1, err = hs.manager.NewConfiguration(hs.manager.NodeIDs()[hs.Config.QuorumSize-2:], &struct{}{})
+	hs.vcCfg1, err = hs.manager.NewConfiguration(hs.manager.NodeIDs()[hs.Config.QuorumSize-1:], &struct{}{})
 	if err != nil {
 		return fmt.Errorf("Failed to create view change configuration: %w", err)
 	}
@@ -201,6 +201,7 @@ func (hs *HotStuff) Propose() {
 	if hs.viewBenchmark > 0 && hs.GetHeight() > 0 && hs.GetHeight()%hs.viewBenchmark == 0 {
 		//fmt.Printf("Height %d %d\n", hs.GetHeight(), hs.viewBenchmark)
 		hs.vcCfg.Propose(protobuf)
+		hs.vcCfg1.Propose(proto.BlockToProto(hs.CreateProposal()))
 	} else {
 		//fmt.Printf("Height %d\n", hs.GetHeight())
 		hs.cfg.Propose(protobuf)
@@ -213,7 +214,7 @@ func (hs *HotStuff) Propose() {
 
 // SendNewView sends a NEW-VIEW message to a specific replica
 func (hs *HotStuff) SendNewView(id config.ReplicaID) {
-	//fmt.Printf("1\n")
+	//fmt.Printf("New View\n")
 	qc := hs.GetQCHigh()
 	if node, ok := hs.nodes[id]; ok {
 		node.NewView(proto.QuorumCertToProto(qc))

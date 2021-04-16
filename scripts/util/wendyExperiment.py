@@ -376,7 +376,8 @@ def create_config(propertyFile):
     replicas = properties['replicas']
     clients = properties['clients']
     username = properties['username']
-    data_dict = {"pacemaker": "round-robin", "leader-id": 1, "view-change": 10, "view-timeout": 10000, "leader-schedule": [1, 2, 3, 4]}
+    leader_schedule = [i + 1 for i in range(len(replicas))]
+    data_dict = {"pacemaker": "fixed", "leader-id": 1, "view-change": 100, "view-timeout": 1000, "leader-schedule": leader_schedule}
     id = 1
     replicas_dict = []
     for r in replicas:
@@ -481,14 +482,61 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
     clientKeyName = clientKey
     replicaKeyName = replicaKey
 
+    executeParallelBlockingRemoteCommand([username + "@" + r for r in replicaIpList], "cd " + remoteProjectDir + " ; make all")
+    executeParallelBlockingRemoteCommand([username + "@" + c for c in properties['clients']], "cd " + remoteProjectDir + " ; make all")
+
     print("WARNING: THIS IS HACKY AND WILL NOT WORK WHEN CONFIGURING MYSQL")
     if (simulateLatency):
         # Region 1: us-west-1 Region 2: sa-east-1 Region 3: eu-central-1 Region 4: ap-northeast-1, Ping latencies: https://www.cloudping.co/grid
         print("Simulating a " + str(simulateLatency) + " ms")
-        setupTCWAN(username + "@" + replicaIpList[0], latencies0, replicaIpList)
-        setupTCWAN(username + "@" + replicaIpList[1], latencies1, replicaIpList)
-        setupTCWAN(username + "@" + replicaIpList[2], latencies2, replicaIpList)
-        setupTCWAN(username + "@" + replicaIpList[3], latencies3, replicaIpList)
+        numRegions = 4
+        numReplicasPerRegion = int(int(properties['replica_machines']) / 4)
+        regionOneReplicas = replicaIpList[0:numReplicasPerRegion]
+        regionTwoReplicas = replicaIpList[numReplicasPerRegion:2*numReplicasPerRegion]
+        regionThreeReplicas = replicaIpList[2*numReplicasPerRegion:3*numReplicasPerRegion]
+        regionFourReplicas = replicaIpList[3*numReplicasPerRegion:]
+
+        print(regionOneReplicas)
+        print(regionTwoReplicas)
+        print(regionThreeReplicas)
+        print(regionFourReplicas)
+
+        latenciesFirst = [0]*len(regionOneReplicas) + [int(properties['latencyR1R2'])]*len(regionTwoReplicas) + [int(properties['latencyR1R3'])]*len(regionThreeReplicas) + [int(properties['latencyR1R4'])]*len(regionFourReplicas)
+        for replica in regionOneReplicas:
+            setupTCWAN(username + "@" + replica, latenciesFirst, replicaIpList)
+        
+        latenciesSecond = [int(properties['latencyR1R2'])]*len(regionOneReplicas) + [0]*len(regionTwoReplicas) + [int(properties['latencyR2R3'])]*len(regionThreeReplicas) + [int(properties['latencyR2R4'])]*len(regionFourReplicas)
+        for replica in regionTwoReplicas:
+            setupTCWAN(username + "@" + replica, latenciesSecond, replicaIpList)
+        
+        latenciesThree = [int(properties['latencyR1R3'])]*len(regionOneReplicas) + [int(properties['latencyR2R3'])]*len(regionTwoReplicas) + [0]*len(regionThreeReplicas) + [int(properties['latencyR3R4'])]*len(regionFourReplicas)
+        for replica in regionThreeReplicas:
+            setupTCWAN(username + "@" + replica, latenciesThree, replicaIpList)
+
+        latenciesFour = [int(properties['latencyR1R4'])]*len(regionOneReplicas) + [int(properties['latencyR2R4'])]*len(regionTwoReplicas) + [int(properties['latencyR3R4'])]*len(regionThreeReplicas) + [0]*len(regionFourReplicas)
+        for replica in regionFourReplicas:
+            setupTCWAN(username + "@" + replica, latenciesFour, replicaIpList)
+
+        #for replica in regionTwoReplicas:
+            #setupTC(username + "@" + replica, int(properties['latencyR1R2']), regionOneReplicas)
+        #    setupTC(username + "@" + replica, int(properties['latencyR2R3']), regionThreeReplicas)
+        #    setupTC(username + "@" + replica, int(properties['latencyR2R4']), regionFourReplicas)
+
+        #for replica in regionThreeReplicas:
+            #setupTC(username + "@" + replica, int(properties['latencyR1R3']), regionOneReplicas)
+            #setupTC(username + "@" + replica, int(properties['latencyR2R3']), regionTwoReplicas)
+        #    setupTC(username + "@" + replica, int(properties['latencyR3R4']), regionFourReplicas)
+
+        #for replica in regionFourReplicas:
+        #    setupTC(username + "@" + replica, int(properties['latencyR1R4']), regionOneReplicas)
+        #    setupTC(username + "@" + replica, int(properties['latencyR2R4']), regionTwoReplicas)
+        #    setupTC(username + "@" + replica, int(properties['latencyR3R4']), regionThreeReplicas)
+            
+
+        #setupTCWAN(username + "@" + replicaIpList[0], latencies0, replicaIpList)
+        #setupTCWAN(username + "@" + replicaIpList[1], latencies1, replicaIpList)
+        #setupTCWAN(username + "@" + replicaIpList[2], latencies2, replicaIpList)
+        #setupTCWAN(username + "@" + replicaIpList[3], latencies3, replicaIpList)
         #for i in range(len(latencies0)):
         #    if i == 0:
         #        continue
@@ -522,7 +570,28 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
             # if (useStorage):
         #for c in clientIpList:
         #    setupTC(username + "@" + c, simulateLatency, replicaIpList, clientKey)
+    #for c in clientIpList:
+    #    try:
+    #        executeRemoteCommandNoCheck(
+    #                    username + "@" + c, "ps -ef | grep hotstuffclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+    #        executeRemoteCommandNoCheck(
+    #                    username + "@" + c, "ps -ef | grep wendyecclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+    #        executeRemoteCommandNoCheck(
+    #                    username + "@" + c, "ps -ef | grep fastwendyecclient | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", clientKeyName)
+    #    except Exception as e:
+    #        print(" ")
 
+    #for r in replicaIpList:
+    #    try:
+    #        executeRemoteCommandNoCheck(
+    #                username + "@" + r, "ps -ef | grep hotstuffserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+    #        executeRemoteCommandNoCheck(
+    #                        username + "@" + r, "ps -ef | grep wendyecserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+    #        executeRemoteCommandNoCheck(
+    #                        username + "@" + r, "ps -ef | grep fastwendyecserver | grep -v grep | grep -v bash | awk '{print \$2}' | xargs -r kill -9", replicaKeyName)
+    #    except Exception as e:
+    #        print(" ")
+    
     first = True
     dataLoaded = False
     #nbRounds = 1
@@ -614,7 +683,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                     json.dump(properties, fp, indent=2, sort_keys=True)
                 print("Sending Property File and Starting Server")
                 for replica in replicaIpList:
-                    sendFile(localProp_, username + "@" + replica, remotePath, replicaKey)
+                    #sendFile(localProp_, username + "@" + replica, remotePath, replicaKey)
                     # cmd = "cd " + remoteExpDir + " ; " + javaCommandServer + " -cp " + jarName + " " + proxyMainClass + " " + remoteProp_ + " 1>" + \
                     #    remotePath + "/proxy" l+ \
                     #    str(sid) + ".log 2>" + remotePath + \
@@ -631,7 +700,7 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                         replica, cmd, replicaKeyName)
                     t.start()
 
-                time.sleep(30)
+                #time.sleep(5)
 
                 oldDataSet = None
                 ## Load Data ##
@@ -683,14 +752,14 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                         str(cid) + "_" + properties['run_name']
                     with open(localProp_, 'w') as fp:
                         json.dump(properties, fp, indent=2, sort_keys=True)
-                    sendFile(localProp_, username + "@" + ip, remoteProp_, clientKeyName)
+                    #sendFile(localProp_, username + "@" + ip, remoteProp_, clientKeyName)
                     # cmd = "cd " + remoteExpDir + " ; " + javaCommandClient + " -cp " + clientMainClass + " " + jarName + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
                     # cmd = "cd " + remoteExpDir + "; " + javaCommandClient + " -cp " + jarName + " " + clientMainClass + " " + remoteProp_ + " 1>" + remotePath + "/client_" + ip + "_" + \
                     #    str(cid) + ".log 2>" + remotePath + \
                     #    "/client_" + ip + "_" + str(cid) + "_err.log"
-                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --self-id " + str(cid) + " --max-inflight " + properties['max_inflight'] + " --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
+                    cmd = "cd " + remoteProjectDir + " ; " + goCommandClient + " --benchmark --self-id " + str(cid) + " --max-inflight " + properties['max_inflight'] + " --rate-limit 0 --payload-size 0 --exit-after " + properties['exp_length'] + " 1>" + \
                         remotePath + "/client_" + ip + "_" + \
                         str(cid) + ".log"
                     t = executeNonBlockingRemoteCommand(username + "@" + ip, cmd, clientKeyName)
@@ -758,9 +827,9 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 print(str(e.returncode))
 
     # Tear down TC rules
-    #if (simulateLatency):
-    #    deleteTC(proxy, storage, proxyKey)
-    #    deleteTC(storage, proxy, storageKey)
+    if (simulateLatency):
+        deleteTC(proxy, storage, proxyKey)
+        deleteTC(storage, proxy, storageKey)
 
     return expDir
 
@@ -952,16 +1021,16 @@ def calculateParallel(propertyFile, localExpDir):
 def generateData(results, folderName, clients, time):
     print("Generating Data for " + folderName)
     result = str(clients) + " "
-    result += str(computeMean(folderName, 2)) + " "
-    result += str(computeMin(folderName, 2)) + " "
-    result += str(computeMax(folderName, 2)) + " "
-    result += str(computeVar(folderName, 2)) + " "
-    result += str(computeStd(folderName, 2)) + " "
-    result += str(computePercentile(folderName, 2, 50)) + " "
-    result += str(computePercentile(folderName, 2, 75)) + " "
-    result += str(computePercentile(folderName, 2, 90)) + " "
-    result += str(computePercentile(folderName, 2, 95)) + " "
-    result += str(computePercentile(folderName, 2, 99)) + " "
+    result += str(computeMean(folderName, 2)) + " 0 0 0 0 0 0 0 0 0 "
+    #result += str(computeMin(folderName, 2)) + " "
+    #result += str(computeMax(folderName, 2)) + " "
+    #result += str(computeVar(folderName, 2)) + " "
+    #result += str(computeStd(folderName, 2)) + " "
+    #result += str(computePercentile(folderName, 2, 50)) + " "
+    #result += str(computePercentile(folderName, 2, 75)) + " "
+    #result += str(computePercentile(folderName, 2, 90)) + " "
+    #result += str(computePercentile(folderName, 2, 95)) + " "
+    #result += str(computePercentile(folderName, 2, 99)) + " "
     result += str(computeThroughput(folderName, 2, time)) + " \n"
     results[clients] = result
 
@@ -979,7 +1048,7 @@ def plotThroughputLatency(dataFileNames, outputFileName, title=None):
     for x in dataFileNames:
         data.append((x[0], x[1], 11, 1))
     plotLine(title, x_axis, y_axis, outputFileName,
-             data, False, xrightlim=800, yrightlim=1000)
+             data, True, xrightlim=175000, yrightlim=30)
 
 
 # Plots a throughput. This graph assumes the
@@ -1013,3 +1082,25 @@ def plotLatency(dataFileNames, outputFileName, title=None):
         data.append((x[0], x[1], 0, 1))
     plotLine(title, x_axis, y_axis, outputFileName,
              data, False, xrightlim=300, yrightlim=5)
+
+def plotAggSigBench(dataFileNames, outputFileName, title=None):
+    x_axis = "f"
+    y_axis = "Verification Latency(ms)"
+    if (not title):
+        title = "LatencyGraph"
+    data = list()
+    for x in dataFileNames:
+        data.append((x[0], x[1], 0, 1))
+    plotLine(title, x_axis, y_axis, outputFileName,
+             data, True, xrightlim=75, yrightlim=150)
+
+def plotAggSigBenchVd(dataFileNames, outputFileName, title=None):
+    x_axis = "Log(Max View Difference)"
+    y_axis = "Signing Latency(ms)"
+    if (not title):
+        title = "LatencyGraph"
+    data = list()
+    for x in dataFileNames:
+        data.append((x[0], x[1], 0, 1))
+    plotLine(title, x_axis, y_axis, outputFileName,
+             data, True, xrightlim=11, yrightlim=2.5)

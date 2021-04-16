@@ -7,7 +7,6 @@ import (
 	"math"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
@@ -400,7 +399,7 @@ func (hs *HotStuffCore) commit(block *data.Block) {
 		block.Committed = true
 		logger.Println("EXEC", block)
 		//fmt.Printf("%d\n", len(block.Commands))
-		time.Sleep(time.Millisecond * 2)
+		//time.Sleep(time.Millisecond * 2)
 		hs.exec <- block.Commands
 	}
 }
@@ -845,7 +844,7 @@ func (wendyEC *WendyCoreEC) commit(block *data.Block) {
 		block.Committed = true
 		logger.Println("EXEC", block)
 		//fmt.Printf("%s\n", block.String())
-		time.Sleep(time.Millisecond * 2)
+		//time.Sleep(time.Millisecond * 2)
 		wendyEC.exec <- block.Commands
 	}
 }
@@ -1888,7 +1887,7 @@ func (wendyEC *FastWendyCoreEC) commit(block *data.BlockFastWendy) {
 		block.Committed = true
 		logger.Println("EXEC", block)
 		//fmt.Printf("%d\n", len(block.Commands))
-		time.Sleep(time.Millisecond * 2)
+		//time.Sleep(time.Millisecond * 2)
 		wendyEC.exec <- block.Commands
 	}
 }

@@ -489,34 +489,36 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
     if (simulateLatency):
         # Region 1: us-west-1 Region 2: sa-east-1 Region 3: eu-central-1 Region 4: ap-northeast-1, Ping latencies: https://www.cloudping.co/grid
         print("Simulating a " + str(simulateLatency) + " ms")
-        numRegions = 4
-        numReplicasPerRegion = int(int(properties['replica_machines']) / 4)
-        regionOneReplicas = replicaIpList[0:numReplicasPerRegion]
-        regionTwoReplicas = replicaIpList[numReplicasPerRegion:2*numReplicasPerRegion]
-        regionThreeReplicas = replicaIpList[2*numReplicasPerRegion:3*numReplicasPerRegion]
-        regionFourReplicas = replicaIpList[3*numReplicasPerRegion:]
+        # BEGIN
+        #numRegions = 4
+        #numReplicasPerRegion = int(int(properties['replica_machines']) / 4)
+        #regionOneReplicas = replicaIpList[0:numReplicasPerRegion]
+        #regionTwoReplicas = replicaIpList[numReplicasPerRegion:2*numReplicasPerRegion]
+        #regionThreeReplicas = replicaIpList[2*numReplicasPerRegion:3*numReplicasPerRegion]
+        #regionFourReplicas = replicaIpList[3*numReplicasPerRegion:]
 
-        print(regionOneReplicas)
-        print(regionTwoReplicas)
-        print(regionThreeReplicas)
-        print(regionFourReplicas)
+        #print(regionOneReplicas)
+        #print(regionTwoReplicas)
+        #print(regionThreeReplicas)
+        #print(regionFourReplicas)
 
-        latenciesFirst = [0]*len(regionOneReplicas) + [int(properties['latencyR1R2'])]*len(regionTwoReplicas) + [int(properties['latencyR1R3'])]*len(regionThreeReplicas) + [int(properties['latencyR1R4'])]*len(regionFourReplicas)
-        for replica in regionOneReplicas:
-            setupTCWAN(username + "@" + replica, latenciesFirst, replicaIpList)
+        #latenciesFirst = [0]*len(regionOneReplicas) + [int(properties['latencyR1R2'])]*len(regionTwoReplicas) + [int(properties['latencyR1R3'])]*len(regionThreeReplicas) + [int(properties['latencyR1R4'])]*len(regionFourReplicas)
+        #for replica in regionOneReplicas:
+        #    setupTCWAN(username + "@" + replica, latenciesFirst, replicaIpList)
         
-        latenciesSecond = [int(properties['latencyR1R2'])]*len(regionOneReplicas) + [0]*len(regionTwoReplicas) + [int(properties['latencyR2R3'])]*len(regionThreeReplicas) + [int(properties['latencyR2R4'])]*len(regionFourReplicas)
-        for replica in regionTwoReplicas:
-            setupTCWAN(username + "@" + replica, latenciesSecond, replicaIpList)
+        #latenciesSecond = [int(properties['latencyR1R2'])]*len(regionOneReplicas) + [0]*len(regionTwoReplicas) + [int(properties['latencyR2R3'])]*len(regionThreeReplicas) + [int(properties['latencyR2R4'])]*len(regionFourReplicas)
+        #for replica in regionTwoReplicas:
+        #    setupTCWAN(username + "@" + replica, latenciesSecond, replicaIpList)
         
-        latenciesThree = [int(properties['latencyR1R3'])]*len(regionOneReplicas) + [int(properties['latencyR2R3'])]*len(regionTwoReplicas) + [0]*len(regionThreeReplicas) + [int(properties['latencyR3R4'])]*len(regionFourReplicas)
-        for replica in regionThreeReplicas:
-            setupTCWAN(username + "@" + replica, latenciesThree, replicaIpList)
+        #latenciesThree = [int(properties['latencyR1R3'])]*len(regionOneReplicas) + [int(properties['latencyR2R3'])]*len(regionTwoReplicas) + [0]*len(regionThreeReplicas) + [int(properties['latencyR3R4'])]*len(regionFourReplicas)
+        #for replica in regionThreeReplicas:
+        #    setupTCWAN(username + "@" + replica, latenciesThree, replicaIpList)
 
-        latenciesFour = [int(properties['latencyR1R4'])]*len(regionOneReplicas) + [int(properties['latencyR2R4'])]*len(regionTwoReplicas) + [int(properties['latencyR3R4'])]*len(regionThreeReplicas) + [0]*len(regionFourReplicas)
-        for replica in regionFourReplicas:
-            setupTCWAN(username + "@" + replica, latenciesFour, replicaIpList)
+        #latenciesFour = [int(properties['latencyR1R4'])]*len(regionOneReplicas) + [int(properties['latencyR2R4'])]*len(regionTwoReplicas) + [int(properties['latencyR3R4'])]*len(regionThreeReplicas) + [0]*len(regionFourReplicas)
+        #for replica in regionFourReplicas:
+        #    setupTCWAN(username + "@" + replica, latenciesFour, replicaIpList)
 
+        # END
         #for replica in regionTwoReplicas:
             #setupTC(username + "@" + replica, int(properties['latencyR1R2']), regionOneReplicas)
         #    setupTC(username + "@" + replica, int(properties['latencyR2R3']), regionThreeReplicas)
@@ -558,8 +560,8 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
 
 
         
-        #for replica in replicaIpList:
-        #    setupTC(username + "@" + replica, simulateLatency, replicaIpList, replicaKey)
+        for replica in replicaIpList:
+            setupTC(username + "@" + replica, simulateLatency, replicaIpList, replicaKey)
         # if (useProxy):
             #setupTC(proxy, simulateLatency, [storage], proxyKey)
             # if (useStorage):
@@ -827,9 +829,9 @@ def run(propertyFile, cloudlabFile="cloudlab.json"):
                 print(str(e.returncode))
 
     # Tear down TC rules
-    if (simulateLatency):
-        deleteTC(proxy, storage, proxyKey)
-        deleteTC(storage, proxy, storageKey)
+    #if (simulateLatency):
+    #    deleteTC(proxy, storage, proxyKey)
+    #    deleteTC(storage, proxy, storageKey)
 
     return expDir
 
@@ -1062,7 +1064,7 @@ def plotThroughput(dataFileNames, outputFileName, title=None):
         title = "ThroughputGraph"
     data = list()
     for x in dataFileNames:
-        data.append((x[0], x[1], 0, 11))
+        data.append((x[0], x[1], 0, 2))
     plotLine(title, x_axis, y_axis, outputFileName, data,
              False, xrightlim=300, yrightlim=200000)
 
@@ -1104,3 +1106,14 @@ def plotAggSigBenchVd(dataFileNames, outputFileName, title=None):
         data.append((x[0], x[1], 0, 1))
     plotLine(title, x_axis, y_axis, outputFileName,
              data, True, xrightlim=11, yrightlim=2.5)
+
+def plotThroughputF(dataFileNames, outputFileName, title=None):
+    x_axis = "f"
+    y_axis = "Throughput (cmds/s)"
+    if (not title):
+        title = "ThroughputGraph"
+    data = list()
+    for x in dataFileNames:
+        data.append((x[0], x[1], 0, 2))
+    plotLine(title, x_axis, y_axis, outputFileName, data,
+             True, xrightlim=64, yrightlim=70000, log2X=True)

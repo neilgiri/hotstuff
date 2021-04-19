@@ -13,17 +13,32 @@ import cloudlab_util
 
 #cloudlab_util.default_context()
 
-#wendyExperiment.cleanupCloudlab('config/test.json')
-#wendyExperiment.setupCloudlab('config/test.json')
-#localPath = wendyExperiment.setup('config/test.json')
-#wendyExperiment.create_config('config/test.json')
-wendyExperiment.run('config/test.json')
-wendyExperiment.calculateParallel('config/test.json', None)
-localPath = "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experiments/testExperiment5"
-dataFile = localPath + "/hotstuff.dat"
+#wendyExperiment.cleanupCloudlab('config/test1.json')
+#wendyExperiment.setupCloudlab('config/test1.json')
+#localPath = wendyExperiment.setup('config/test1.json')
+#wendyExperiment.create_config('config/test1.json')
+#wendyExperiment.run('config/test1.json')
+#wendyExperiment.calculateParallel('config/test1.json', None)
+localPath = "/Users/neilgiridharan/Documents/VMware/WendyCode/hotstuff/experiments/testExperiment8"
+dataFile = localPath + "/hotstuff-5ms.dat"
 outputDataFile = localPath + "/result.pdf"
 data = list()
-data.append((dataFile,"HotStuff BatchSize 100"))
-data.append((localPath + "/fastwendy.dat", "Fast Wendy BatchSize 100"))
-data.append((localPath + "/wendy.dat", "Wendy BatchSize 100"))
-wendyExperiment.plotThroughputLatency(data, outputDataFile)
+data.append((dataFile,"HS-400"))
+
+data.append((localPath + "/wendy-5ms.dat", "W-400"))
+data.append((localPath + "/fastwendy-5ms.dat", "FW-400"))
+wendyExperiment.plotThroughputF(data, outputDataFile)
+
+
+#data.append((localPath + "/hotstuff400.dat", "HS-400"))
+#data.append((localPath + "/wendy400.dat", "W-400"))
+#data.append((localPath + "/fastwendy400.dat", "FW-400"))
+
+#data.append((localPath + "/hotstuff800.dat", "HS-800"))
+#data.append((localPath + "/wendy800.dat", "W-800"))
+#data.append((localPath + "/fastwendy800.dat", "FW-800"))
+
+#data.append((localPath + "/aggsigmicrobenchvd.dat", "WendySig"))
+#data.append((localPath + "/aggsigmicrobenchvd-bgls.dat", "BGLS03"))
+
+#wendyExperiment.plotAggSigBenchVd(data, outputDataFile)

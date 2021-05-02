@@ -76,8 +76,8 @@ type AggregateSignature struct {
 // KGen gets secret keys
 func (AS *AggregateSignature) KGen(sk *bls.SecretKey, pk *bls.PublicKey, pop *bls.Sign) {
 	sk.SetByCSPRNG()
-	pk = sk.GetPublicKey()
-	pop = sk.GetPop()
+	*pk = *sk.GetPublicKey()
+	*pop = *sk.GetPop()
 }
 
 // SignShare verifies a partial signature
@@ -129,11 +129,14 @@ func (AS *AggregateSignature) Agg(sigs []bls.Sign) bls.Sign {
 func (AS *AggregateSignature) VerifyAgg(keyMessagePairs []KeyAggMessagePair, sig bls.Sign) bool {
 	i := 0
 	firstPair := keyMessagePairs[0]
-	publicKeys := make([]bls.PublicKey, len(keyMessagePairs)*len(firstPair.PK))
+	//publicKeys := make([]bls.PublicKey, len(keyMessagePairs)*len(firstPair.PK))
+	publicKeys := make([]bls.PublicKey, 0)
 
 	for _, pair := range keyMessagePairs {
 		for j, _ := range pair.M.C {
-			publicKeys[i] = pair.PK[j]
+			firstPair = pair
+			publicKeys = append(publicKeys, pair.PK[j])
+			//publicKeys[i] = pair.PK[j]
 			i++
 		}
 	}

@@ -448,7 +448,7 @@ type WendyCoreEC struct {
 	bLeaf          *data.Block
 	qcHigh         *data.QuorumCert
 	pendingQCs     map[data.BlockHash]*data.QuorumCert
-	viewChangeMsgs map[string][]data.NewViewMsg
+	viewChangeMsgs map[string][]*data.NewViewMsg
 
 	waitProposal *sync.Cond
 
@@ -536,7 +536,7 @@ func NewWendyEC(conf *config.ReplicaConfigWendy) *WendyCoreEC {
 		qcHigh:         qcForGenesis,
 		Blocks:         blocks,
 		pendingQCs:     make(map[data.BlockHash]*data.QuorumCert),
-		viewChangeMsgs: make(map[string][]data.NewViewMsg),
+		viewChangeMsgs: make(map[string][]*data.NewViewMsg),
 		cancel:         cancel,
 		SigCache:       data.NewSignatureCacheWendy(conf),
 		cmdCache:       data.NewCommandSet(),
@@ -609,20 +609,24 @@ func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialC
 	if block.Height <= wendyEC.vHeight {
 		wendyEC.mut.Unlock()
 		logger.Println("OnReceiveProposal: Block height less than vHeight")
+		//fmt.Println("Less height: " + strconv.Itoa(block.Height) + ", " + strconv.Itoa(wendyEC.vHeight))
 		return nil, nil, fmt.Errorf("Block was not accepted")
 	}
 
 	safe := false
-	if nExists && qcBlock.Height > wendyEC.bLock.Height {
+	if nExists && qcBlock.Height >= wendyEC.bLock.Height {
 		safe = true
 	} else {
 		logger.Println("OnReceiveProposal: liveness condition failed")
+		//fmt.Println("qcBlock " + strconv.Itoa(qcBlock.Height) + ", lock " + strconv.Itoa(wendyEC.bLock.Height))
 		// check if block extends bLock
 		b := block
 		ok := true
-		for ok && b.Height > wendyEC.bLock.Height+1 {
+
+		for ok && b.Height > wendyEC.bLock.Height {
 			b, ok = wendyEC.Blocks.Get(b.ParentHash)
 		}
+
 		if ok && b.ParentHash == wendyEC.bLock.Hash() {
 			safe = true
 		} else {
@@ -633,7 +637,11 @@ func (wendyEC *WendyCoreEC) OnReceiveProposal(block *data.Block) (*data.PartialC
 	if !safe {
 		wendyEC.mut.Unlock()
 		logger.Println("OnReceiveProposal: Block not safe")
-		return nil, &data.NackMsg{HighLockCertificate: wendyEC.GetQCHigh(), Hash: block.Hash()}, fmt.Errorf("Block was not accepted")
+		if nExists && wendyEC.bLock.Height > qcBlock.Height {
+			return nil, &data.NackMsg{HighLockCertificate: wendyEC.GetQCHigh(), Hash: block.Hash()}, fmt.Errorf("Higher lock")
+		} else {
+			return nil, nil, fmt.Errorf("Block not accepted")
+		}
 	}
 
 	logger.Println("OnReceiveProposal: Accepted block")
@@ -711,7 +719,7 @@ func (wendyEC *WendyCoreEC) OnReceiveVote(cert *data.PartialCert) {
 }
 
 // OnReceiveNewView handles the leader's response to receiving a NewView rpc from a replica
-func (wendyEC *WendyCoreEC) OnReceiveNewView(newViewMsg *data.NewViewMsg) {
+func (wendyEC *WendyCoreEC) OnReceiveNewView(newViewMsg *data.NewViewMsg) int {
 	wendyEC.mut.Lock()
 	defer wendyEC.mut.Unlock()
 	logger.Println("OnReceiveNewView")
@@ -719,20 +727,36 @@ func (wendyEC *WendyCoreEC) OnReceiveNewView(newViewMsg *data.NewViewMsg) {
 	wendyEC.UpdateQCHigh(newViewMsg.LockCertificate)
 
 	if _, ok := wendyEC.viewChangeMsgs[newViewMsg.Message.V]; ok {
-		wendyEC.viewChangeMsgs[newViewMsg.Message.V][newViewMsg.ID-1] = *newViewMsg
+		wendyEC.viewChangeMsgs[newViewMsg.Message.V][newViewMsg.ID-1] = newViewMsg
 	} else {
-		wendyEC.viewChangeMsgs[newViewMsg.Message.V] = make([]data.NewViewMsg, len(wendyEC.Config.Replicas))
-		wendyEC.viewChangeMsgs[newViewMsg.Message.V][newViewMsg.ID-1] = *newViewMsg
+		wendyEC.viewChangeMsgs[newViewMsg.Message.V] = make([]*data.NewViewMsg, len(wendyEC.Config.Replicas))
+		wendyEC.viewChangeMsgs[newViewMsg.Message.V][newViewMsg.ID-1] = newViewMsg
 	}
+
+	count := 0
+	for _, v := range wendyEC.viewChangeMsgs[newViewMsg.Message.V] {
+		if v != nil {
+			count++
+		}
+	}
+
+	/*if count >= wendyEC.Config.QuorumSize {
+		wendyEC.emitEvent(Event{Type: ReceiveNewView, QC: newViewMsg.LockCertificate})
+	}*/
+
+	return count
+	//fmt.Println("Map")
+	//fmt.Println(len(wendyEC.viewChangeMsgs[newViewMsg.Message.V]))
 }
 
 // OnReceiveNack handles the leader's response to receiving a Nack rpc from a replica
-func (wendyEC *WendyCoreEC) OnReceiveNack(nackMsg *data.NackMsg) data.ProofNC {
+func (wendyEC *WendyCoreEC) OnReceiveNack(nackMsg *data.NackMsg, targetView string) data.ProofNC {
 	wendyEC.mut.Lock()
 	defer wendyEC.mut.Unlock()
 	logger.Println("OnReceiveNack")
 
-	targetView := strconv.FormatInt(int64(wendyEC.GetHeight()), 2)
+	//targetBlock, _ := wendyEC.expectBlock(nackMsg.Hash)
+	//targetView := strconv.FormatInt(int64(wendyEC.GetHeight()-2), 10)
 
 	var AS data.AggregateSignature
 	msgs := wendyEC.viewChangeMsgs[targetView]
@@ -740,14 +764,18 @@ func (wendyEC *WendyCoreEC) OnReceiveNack(nackMsg *data.NackMsg) data.ProofNC {
 
 	sigs := make([]bls.Sign, numEntries)
 	for i := 0; i < numEntries; i++ {
-		sigs[i] = msgs[i].Signature
+		if msgs[i] != nil {
+			sigs[i] = msgs[i].Signature
+		}
 	}
 
 	aggSig := AS.Agg(sigs)
 
 	pairs := make([]data.KeyAggMessagePair, numEntries)
 	for i := 0; i < numEntries; i++ {
-		pairs[i] = data.KeyAggMessagePair{PK: wendyEC.Config.Replicas[msgs[i].ID].ProofPubKeys, M: msgs[i].Message}
+		if msgs[i] != nil {
+			pairs[i] = data.KeyAggMessagePair{PK: wendyEC.Config.Replicas[msgs[i].ID].ProofPubKeys, M: msgs[i].Message}
+		}
 	}
 
 	proof := data.ProofNC{Messages: pairs, Signature: aggSig, Hash: nackMsg.Hash}
@@ -761,24 +789,27 @@ func (wendyEC *WendyCoreEC) OnReceiveProofNC(proof *data.ProofNC) (*data.Partial
 	logger.Println("OnReceiveProofNC")
 
 	var AS data.AggregateSignature
-	block, _ := wendyEC.expectBlock(proof.Hash)
+	//block, _ := wendyEC.expectBlock(proof.Hash)
+
 	if AS.VerifyAgg(proof.Messages, proof.Signature) {
+		//fmt.Println("Accepted proofNC")
 		logger.Println("OnReceiveProofNC: Accepted block")
-		wendyEC.vHeight = block.Height
-		wendyEC.cmdCache.MarkProposed(block.Commands...)
+		//wendyEC.vHeight = block.Height
+		//wendyEC.cmdCache.MarkProposed(block.Commands...)
 		//wendyEC.mut.Unlock()
 
-		wendyEC.waitProposal.Broadcast()
-		wendyEC.emitEvent(Event{Type: ReceiveProposal, Block: block, Replica: block.Proposer})
+		//wendyEC.waitProposal.Broadcast()
+		//wendyEC.emitEvent(Event{Type: ReceiveProposal, Block: block, Replica: block.Proposer})
 
 		// queue block for update
-		wendyEC.pendingUpdates <- block
+		//wendyEC.pendingUpdates <- block
 
-		pc, err := wendyEC.SigCache.CreatePartialCert(wendyEC.Config.ID, wendyEC.Config.PrivateKey, block)
+		/*pc, err := wendyEC.SigCache.CreatePartialCert(wendyEC.Config.ID, wendyEC.Config.PrivateKey, block)
 		if err != nil {
 			return nil, err
-		}
-		return pc, nil
+		}*/
+		//return pc, nil
+		return nil, nil
 	}
 	return nil, nil
 }

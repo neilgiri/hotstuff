@@ -47,6 +47,12 @@ func (h BlockHash) String() string {
 	return hex.EncodeToString(h[:])
 }
 
+func (h BlockHash) ToBytes() []byte {
+	arr := make([]byte, 32)
+	copy(h[:], arr)
+	return arr
+}
+
 // Block represents a block in the tree of commands
 type Block struct {
 	hash       *BlockHash

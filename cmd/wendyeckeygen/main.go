@@ -6,8 +6,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/data"
 	"github.com/spf13/pflag"
 )
@@ -29,6 +31,7 @@ func main() {
 		keyPattern = pflag.StringP("pattern", "p", defaultPattern, "Pattern for key file naming. '*' will be replaced by a number.")
 		numKeys    = pflag.IntP("num", "n", 1, "Number of keys to generate")
 		hosts      = pflag.StringSliceP("hosts", "h", []string{}, "Comma-separated list of hostnames or IPs. One for each replica. Or you can use one value for all replicas.")
+		numBlsKeys = pflag.IntP("numBls", "b", 4, "Number of bls keys to generate")
 	)
 	pflag.Parse()
 
@@ -53,6 +56,9 @@ func main() {
 	if *tls && len(*hosts) > 1 && len(*hosts) != *numKeys {
 		logger.Fatalf("You must specify one host or IP for each certificate to generate.")
 	}
+
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
 
 	for i := 0; i < *numKeys; i++ {
 		pk, err := data.GeneratePrivateKey()
@@ -90,6 +96,33 @@ func main() {
 		err = data.WritePublicKeyFile(&pk.PublicKey, pubKeyPath)
 		if err != nil {
 			logger.Fatalf("Failed to write public key file: %v\n", err)
+		}
+	}
+
+	for j := 0; j < *numKeys; j++ {
+		for i := 0; i < *numBlsKeys; i++ {
+			var AS data.AggregateSignature
+			var sk bls.SecretKey
+			var pk bls.PublicKey
+			var pop bls.Sign
+
+			AS.KGen(&sk, &pk, &pop)
+
+			basePath := filepath.Join(dest, strings.ReplaceAll(*keyPattern, "*", fmt.Sprintf("%d", *startID+j)))
+			popPath := basePath + "-" + strconv.Itoa(i) + ".popbls"
+			privKeyPath := basePath + "-" + strconv.Itoa(i) + ".keybls"
+			pubKeyPath := privKeyPath + ".pubbls"
+
+			err = data.WritePopFile(&pop, popPath)
+			err = data.WritePrivateKeyFileBls(&sk, privKeyPath)
+			if err != nil {
+				logger.Fatalf("Failed to write private key file: %v\n", err)
+			}
+
+			err = data.WritePublicKeyFileBls(&pk, pubKeyPath)
+			if err != nil {
+				logger.Fatalf("Failed to write public key file: %v\n", err)
+			}
 		}
 	}
 }

@@ -109,6 +109,30 @@ func WritePrivateKeyFile(key *ecdsa.PrivateKey, filePath string) (err error) {
 	return
 }
 
+// WritePrivateKeyFile writes a private key to the specified file
+func WritePrivateKeyFileBls(key *bls.SecretKey, filePath string) (err error) {
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return
+	}
+
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+
+	marshalled := key.Serialize()
+
+	b := &pem.Block{
+		Type:  privateKeyFileType,
+		Bytes: marshalled,
+	}
+
+	err = pem.Encode(f, b)
+	return
+}
+
 // WritePublicKeyFile writes a public key to the specified file
 func WritePublicKeyFile(key *ecdsa.PublicKey, filePath string) (err error) {
 	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
@@ -123,6 +147,33 @@ func WritePublicKeyFile(key *ecdsa.PublicKey, filePath string) (err error) {
 	}()
 
 	marshalled, err := x509.MarshalPKIXPublicKey(key)
+	if err != nil {
+		return
+	}
+
+	b := &pem.Block{
+		Type:  publicKeyFileType,
+		Bytes: marshalled,
+	}
+
+	err = pem.Encode(f, b)
+	return
+}
+
+// WritePublicKeyFile writes a public key to the specified file
+func WritePublicKeyFileBls(key *bls.PublicKey, filePath string) (err error) {
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return
+	}
+
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+
+	marshalled := key.Serialize()
 	if err != nil {
 		return
 	}
@@ -153,6 +204,33 @@ func WriteCertFile(cert []byte, file string) (err error) {
 	return
 }
 
+// WritePopFile returns
+func WritePopFile(pop *bls.Sign, file string) (err error) {
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return
+	}
+
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+
+	marshalled := pop.Serialize()
+	if err != nil {
+		return
+	}
+
+	b := &pem.Block{
+		Type:  publicKeyFileType,
+		Bytes: marshalled,
+	}
+
+	err = pem.Encode(f, b)
+	return
+}
+
 // ReadPrivateKeyFile reads a private key from the specified file
 func ReadPrivateKeyFile(keyFile string) (key *ecdsa.PrivateKey, err error) {
 	d, err := ioutil.ReadFile(keyFile)
@@ -172,6 +250,29 @@ func ReadPrivateKeyFile(keyFile string) (key *ecdsa.PrivateKey, err error) {
 	key, err = x509.ParseECPrivateKey(b.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to parse key: %w", err)
+	}
+	return
+}
+
+// ReadPrivateKeyFile reads a private key from the specified file
+func ReadPrivateKeyFileBls(keyFile string, key *bls.SecretKey) (err error) {
+	d, err := ioutil.ReadFile(keyFile)
+	if err != nil {
+		return err
+	}
+
+	b, _ := pem.Decode(d)
+	if b == nil {
+		return fmt.Errorf("Failed to decode key")
+	}
+
+	if b.Type != privateKeyFileType {
+		return fmt.Errorf("File type did not match")
+	}
+
+	key.Deserialize(b.Bytes)
+	if err != nil {
+		return fmt.Errorf("Failed to parse key: %w", err)
 	}
 	return
 }
@@ -205,7 +306,47 @@ func ReadPublicKeyFile(keyFile string) (key *ecdsa.PublicKey, err error) {
 	return
 }
 
+// ReadPublicKeyFile reads a public key from the specified file
+func ReadPublicKeyFileBls(keyFile string, key *bls.PublicKey) (err error) {
+	d, err := ioutil.ReadFile(keyFile)
+	if err != nil {
+		return err
+	}
+
+	b, _ := pem.Decode(d)
+	if b == nil {
+		return fmt.Errorf("Failed to decode key")
+	}
+
+	if b.Type != publicKeyFileType {
+		return fmt.Errorf("File type did not match")
+	}
+
+	key.Deserialize(b.Bytes)
+	return
+}
+
 // ReadCertFile returns
 func ReadCertFile(certFile string) (cert []byte, err error) {
 	return ioutil.ReadFile(certFile)
+}
+
+// ReadPublicKeyFile reads a public key from the specified file
+func ReadPopFileBls(popFile string, pop *bls.Sign) (err error) {
+	d, err := ioutil.ReadFile(popFile)
+	if err != nil {
+		return err
+	}
+
+	b, _ := pem.Decode(d)
+	if b == nil {
+		return fmt.Errorf("Failed to decode key")
+	}
+
+	if b.Type != publicKeyFileType {
+		return fmt.Errorf("File type did not match")
+	}
+
+	pop.Deserialize(b.Bytes)
+	return
 }

@@ -125,8 +125,10 @@ func (p *RoundRobinWendyEC) Run(ctx context.Context) {
 	lastBeat := 0
 	beat := func() {
 		nextView := p.GetHeight()
+
 		if p.GetLeader(nextView) == p.Config.ID && lastBeat < nextView &&
 			nextView >= p.GetVotedHeight() {
+			//fmt.Println("Beat: " + strconv.Itoa(nextView))
 			lastBeat = nextView
 			go p.Propose()
 		}

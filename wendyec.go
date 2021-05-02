@@ -39,7 +39,8 @@ type WendyEC struct {
 	*consensus.WendyCoreEC
 	tls bool
 
-	pacemaker PacemakerWendyEC
+	pacemaker     PacemakerWendyEC
+	viewBenchmark int
 
 	nodes map[config.ReplicaID]*proto.Node
 
@@ -54,13 +55,14 @@ type WendyEC struct {
 }
 
 //NewWendyEC creates a new GorumsHotStuff backend object.
-func NewWendyEC(conf *config.ReplicaConfigWendy, pacemaker PacemakerWendyEC, tls bool, connectTimeout, qcTimeout time.Duration) *WendyEC {
+func NewWendyEC(conf *config.ReplicaConfigWendy, pacemaker PacemakerWendyEC, tls bool, connectTimeout, qcTimeout time.Duration, viewBenchmark int) *WendyEC {
 	wendyEC := &WendyEC{
 		pacemaker:      pacemaker,
 		WendyCoreEC:    consensus.NewWendyEC(conf),
 		nodes:          make(map[config.ReplicaID]*proto.Node),
 		connectTimeout: connectTimeout,
 		qcTimeout:      qcTimeout,
+		viewBenchmark:  viewBenchmark,
 	}
 	pacemaker.Init(wendyEC)
 	return wendyEC
@@ -190,12 +192,13 @@ func (wendyEC *WendyEC) SendNewView(id config.ReplicaID) {
 	qc := wendyEC.GetQCHigh()
 	if node, ok := wendyEC.nodes[id]; ok {
 		//node.NewView(proto.QuorumCertToProto(qc))
-		v := strconv.FormatInt(int64(wendyEC.WendyCoreEC.GetHeight()), 2)
-		vD := strconv.FormatInt(int64(wendyEC.WendyCoreEC.GetHeight()-wendyEC.WendyCoreEC.GetLock().Height), 2)
+		v := strconv.FormatInt(int64(wendyEC.GetHeight()), 10)
+		vD := strconv.FormatInt(int64(wendyEC.GetHeight()-wendyEC.WendyCoreEC.GetLock().Height), 2)
+		//fmt.Println(v + " : " + strconv.FormatInt(int64(wendyEC.WendyCoreEC.GetLock().Height), 10))
 		msg := data.AggMessage{C: vD, V: v}
 		var AS data.AggregateSignature
 		sig := AS.SignShare(wendyEC.WendyCoreEC.Config.ProofPrivKeys, msg)
-		newViewMsg := data.NewViewMsg{LockCertificate: qc, Message: msg, Signature: sig}
+		newViewMsg := data.NewViewMsg{LockCertificate: qc, Message: msg, Signature: sig, ID: wendyEC.Config.ID}
 		node.NewView(proto.NewViewMsgToProto(newViewMsg))
 	}
 }
@@ -203,17 +206,36 @@ func (wendyEC *WendyEC) SendNewView(id config.ReplicaID) {
 func (wendyEC *WendyEC) handlePropose(block *data.Block) {
 	p, nack, err := wendyEC.OnReceiveProposal(block)
 	leaderID := wendyEC.pacemaker.GetLeader(block.Height)
+	wendyEC.Blocks.Put(block)
+
+	if wendyEC.viewBenchmark != 0 && wendyEC.GetHeight()%wendyEC.viewBenchmark == 0 {
+		wendyEC.Blocks.Put(block)
+		newHeight := wendyEC.GetHeight() + 1
+		wendyEC.SetLeaf(consensus.CreateLeaf(wendyEC.GetLeaf(), nil, nil, newHeight))
+		wendyEC.SendNewView(wendyEC.pacemaker.GetLeader(newHeight))
+	}
+
+	/*if wendyEC.GetHeight() > wendyEC.viewBenchmark && (wendyEC.GetHeight()-1)%wendyEC.viewBenchmark == 0 {
+		nackMsg := data.NackMsg{HighLockCertificate: wendyEC.GetQCHigh(), Hash: block.Hash()}
+		if leader, ok := wendyEC.nodes[leaderID]; ok {
+			protoMsg := proto.NackMsgToProto(nackMsg)
+			leader.Nack(protoMsg)
+		}
+	}*/
+
 	if err != nil {
 		logger.Println("OnReceiveProposal returned with error:", err)
 		if nack != nil {
-			leader := wendyEC.nodes[leaderID]
-			leader.Nack(proto.NackMsgToProto(*nack))
+			if leader, ok := wendyEC.nodes[leaderID]; ok {
+				leader.Nack(proto.NackMsgToProto(*nack))
+			}
 		}
 		return
 	}
 
 	if wendyEC.Config.ID == leaderID {
 		wendyEC.OnReceiveVote(p)
+		//fmt.Println("VoteV: " + strconv.Itoa(wendyEC.GetHeight()))
 	} else if leader, ok := wendyEC.nodes[leaderID]; ok {
 		leader.Vote(proto.PartialCertToProto(p))
 	}
@@ -324,13 +346,25 @@ func (wendyEC *wendyecServer) Vote(ctx context.Context, cert *proto.PartialCert)
 // NewView handles the leader's response to receiving a NewView rpc from a replica
 func (wendyEC *wendyecServer) NewView(ctx context.Context, msg *proto.NewViewMsg) {
 	newViewMsg := msg.FromProto()
-	wendyEC.OnReceiveNewView(&newViewMsg)
+	proofNC := wendyEC.OnReceiveNewView(&newViewMsg)
+
+	nackMsg := data.NackMsg{HighLockCertificate: wendyEC.GetQCHigh(), Hash: wendyEC.GetLeaf().Hash()}
+	if wendyEC.viewBenchmark != 0 && proofNC >= wendyEC.Config.QuorumSize {
+		proof := wendyEC.OnReceiveNack(&nackMsg, newViewMsg.Message.V)
+		md, _ := metadata.FromIncomingContext(ctx)
+		v := md.Get("id")
+		id, _ := strconv.Atoi(v[0])
+
+		if node, ok := wendyEC.nodes[config.ReplicaID(id)]; ok {
+			node.ProofNoCommit(proto.ProofNCToProto(proof))
+		}
+	}
 }
 
 // Nack handles the leader's response to receiving a Nack rpc from a replica
 func (wendyEC *wendyecServer) Nack(ctx context.Context, nackMsg *proto.NackMsg) {
 	nack := nackMsg.FromProto()
-	proof := wendyEC.OnReceiveNack(&nack)
+	proof := wendyEC.OnReceiveNack(&nack, nack.Hash.String())
 
 	md, _ := metadata.FromIncomingContext(ctx)
 	v := md.Get("id")
@@ -344,15 +378,16 @@ func (wendyEC *wendyecServer) Nack(ctx context.Context, nackMsg *proto.NackMsg) 
 // ProofNoCommit handles the replica's response to receiving a ProofNC rpc from a leader
 func (wendyEC *wendyecServer) ProofNoCommit(ctx context.Context, proof *proto.ProofNC) {
 	proofNC := proof.FromProto()
-	pc, err := wendyEC.OnReceiveProofNC(&proofNC)
+	wendyEC.OnReceiveProofNC(&proofNC)
+	//fmt.Println("PC: " + pc.BlockHash.String())
 
-	md, _ := metadata.FromIncomingContext(ctx)
+	/*md, _ := metadata.FromIncomingContext(ctx)
 	v := md.Get("id")
-	id, _ := strconv.Atoi(v[0])
+	id, _ := strconv.Atoi(v[0])*/
 
-	if err == nil {
+	/*if err == nil {
 		if node, ok := wendyEC.nodes[config.ReplicaID(id)]; ok {
 			node.Vote(proto.PartialCertToProto(pc))
 		}
-	}
+	}*/
 }

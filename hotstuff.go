@@ -198,7 +198,7 @@ func (hs *HotStuff) Propose() {
 	logger.Printf("Propose (%d commands): %s\n", len(proposal.Commands), proposal)
 	protobuf := proto.BlockToProto(proposal)
 
-	if hs.viewBenchmark > 0 && hs.GetHeight() > 0 && hs.GetHeight()%hs.viewBenchmark == 0 {
+	/*if hs.viewBenchmark > 0 && hs.GetHeight() > 0 && hs.GetHeight()%hs.viewBenchmark == 0 {
 		//fmt.Printf("Height %d %d\n", hs.GetHeight(), hs.viewBenchmark)
 		hs.vcCfg.Propose(protobuf)
 		hs.vcCfg1.Propose(proto.BlockToProto(hs.CreateProposal()))
@@ -206,16 +206,17 @@ func (hs *HotStuff) Propose() {
 		//fmt.Printf("Height %d\n", hs.GetHeight())
 		hs.cfg.Propose(protobuf)
 		hs.handlePropose(proposal)
-	}
+	}*/
 
+	hs.cfg.Propose(protobuf)
 	// self-vote
-	//hs.handlePropose(proposal)
+	hs.handlePropose(proposal)
 }
 
 // SendNewView sends a NEW-VIEW message to a specific replica
 func (hs *HotStuff) SendNewView(id config.ReplicaID) {
-	//fmt.Printf("New View\n")
 	qc := hs.GetQCHigh()
+	fmt.Println(hs.GetHeight())
 	if node, ok := hs.nodes[id]; ok {
 		node.NewView(proto.QuorumCertToProto(qc))
 	}
@@ -228,6 +229,17 @@ func (hs *HotStuff) handlePropose(block *data.Block) {
 		return
 	}
 	leaderID := hs.pacemaker.GetLeader(block.Height)
+
+	if hs.viewBenchmark > 0 && hs.GetHeight()%hs.viewBenchmark == 0 {
+		//fmt.Println("NewView " + strconv.Itoa(hs.GetHeight()))
+		newHeight := hs.GetHeight() + 1
+		//block := consensus.CreateLeaf(hs.GetLeaf(), nil, nil, newHeight)
+		//hs.SetLeaf(block)
+		//hs.Blocks.Put(block)
+		hs.SendNewView(hs.pacemaker.GetLeader(newHeight))
+		//return
+	}
+
 	if hs.Config.ID == leaderID {
 		hs.OnReceiveVote(p)
 	} else if leader, ok := hs.nodes[leaderID]; ok {

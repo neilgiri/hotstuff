@@ -2,7 +2,6 @@ package proto
 
 import (
 	"math/big"
-	"reflect"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff/config"
@@ -186,8 +185,10 @@ func ProofNCToProto(message data.ProofNC) *ProofNC {
 	for i := 0; i < len(message.Messages); i++ {
 		messages[i] = KeyAggMessagePairToProto(message.Messages[i])
 	}
-	ref := reflect.ValueOf(message.Hash)
-	return &ProofNC{MessagePairs: messages, Signature: message.Signature.Serialize(), Hash: ref.Bytes()}
+	//ref := reflect.ValueOf(message.Hash)
+	arr := make([]byte, 32)
+	copy(arr, message.Hash[:])
+	return &ProofNC{MessagePairs: messages, Signature: message.Signature.Serialize(), Hash: arr}
 }
 
 // FromProto returns
@@ -205,8 +206,9 @@ func (proofNC *ProofNC) FromProto() data.ProofNC {
 
 // NackMsgToProto returns
 func NackMsgToProto(message data.NackMsg) *NackMsg {
-	ref := reflect.ValueOf(message.Hash)
-	return &NackMsg{QC: QuorumCertToProto(message.HighLockCertificate), Hash: ref.Bytes()}
+	arr := make([]byte, 32)
+	copy(arr, message.Hash[:])
+	return &NackMsg{QC: QuorumCertToProto(message.HighLockCertificate), Hash: arr}
 }
 
 // FromProto returns

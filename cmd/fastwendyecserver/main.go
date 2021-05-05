@@ -12,12 +12,14 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/felixge/fgprof"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/relab/hotstuff"
 	"github.com/relab/hotstuff/client"
 	"github.com/relab/hotstuff/config"
@@ -41,6 +43,8 @@ type options struct {
 	Schedule        []config.ReplicaID `mapstructure:"leader-schedule"`
 	ViewChange      int                `mapstructure:"view-change"`
 	ViewTimeout     int                `mapstructure:"view-timeout"`
+	ViewBenchmark   int                `mapstructure:"view-benchmark"`
+	NumKeys         int                `mapstructure:"numKeys"`
 	BatchSize       int                `mapstructure:"batch-size"`
 	PrintThroughput bool               `mapstructure:"print-throughput"`
 	PrintCommands   bool               `mapstructure:"print-commands"`
@@ -85,10 +89,12 @@ func main() {
 	pflag.Int("batch-size", 100, "How many commands are batched together for each proposal")
 	pflag.Int("view-timeout", 1000, "How many milliseconds before a view is timed out")
 	pflag.String("privkey", "", "The path to the private key file")
+	pflag.Int("view-benchmark", 0, "How often view changes are triggered")
 	pflag.String("cert", "", "Path to the certificate")
 	pflag.Bool("print-commands", false, "Commands will be printed to stdout")
 	pflag.Bool("print-throughput", false, "Throughput measurements will be printed stdout")
 	pflag.Int("interval", 1000, "Throughput measurement interval in milliseconds")
+	pflag.Int("numKeys", 4, "Number of BLS keys to use for aggregate signature scheme")
 	pflag.Bool("tls", false, "Enable TLS")
 	pflag.String("client-listen", "", "Override the listen address for the client server")
 	pflag.String("peer-listen", "", "Override the listen address for the replica (peer) server")
@@ -173,6 +179,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+
+	blsSecretKeys := make([]bls.SecretKey, len(conf.Replicas))
+	for i := 0; i < len(conf.Replicas); i++ {
+		var sk bls.SecretKey
+		err := data.ReadPrivateKeyFileBls("keys/r"+strconv.FormatUint(uint64(conf.SelfID), 10)+"-"+strconv.Itoa(i)+".keybls", &sk)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read private key file: %v\n", err)
+			os.Exit(1)
+		}
+		blsSecretKeys[i] = sk
+	}
+
 	var cert *tls.Certificate
 	if conf.TLS {
 		if conf.Cert == "" {
@@ -206,11 +226,27 @@ func main() {
 
 	replicaConfig := config.NewConfigFastWendy(conf.SelfID, privkey, cert)
 	replicaConfig.BatchSize = conf.BatchSize
+	replicaConfig.ProofNCPrivKeys = blsSecretKeys
 	for _, r := range conf.Replicas {
 		key, err := data.ReadPublicKeyFile(r.Pubkey)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to read public key file '%s': %v\n", r.Pubkey, err)
 			os.Exit(1)
+		}
+
+		blsKeys := make([]bls.PublicKey, len(conf.Replicas))
+
+		for i := 0; i < conf.NumKeys; i++ {
+			var blsKey bls.PublicKey
+			var blsPop bls.Sign
+			data.ReadPublicKeyFileBls("keys/r"+strconv.FormatUint(uint64(r.ID), 10)+"-"+strconv.Itoa(i)+".keybls.pubbls", &blsKey)
+			data.ReadPopFileBls("keys/r"+strconv.FormatUint(uint64(r.ID), 10)+"-"+strconv.Itoa(i)+".popbls", &blsPop)
+			if blsPop.VerifyPop(&blsKey) {
+				blsKeys[i] = blsKey
+			} else {
+				fmt.Fprintf(os.Stderr, "Failed to verify proof of possession file '%s': %v\n", r.Pubkey, err)
+				os.Exit(1)
+			}
 		}
 
 		if conf.TLS {
@@ -225,9 +261,10 @@ func main() {
 		}
 
 		info := &config.ReplicaInfoWendy{
-			ID:      r.ID,
-			Address: r.PeerAddr,
-			PubKey:  key,
+			ID:           r.ID,
+			Address:      r.PeerAddr,
+			PubKey:       key,
+			ProofPubKeys: blsKeys,
 		}
 
 		if r.ID == conf.SelfID {
@@ -325,7 +362,7 @@ func newFastWendyECServer(conf *options, replicaConfig *config.ReplicaConfigFast
 		fmt.Fprintf(os.Stderr, "Invalid pacemaker type: '%s'\n", conf.PmType)
 		os.Exit(1)
 	}
-	srv.wendyec = hotstuff.NewFastWendyEC(replicaConfig, pm, conf.TLS, time.Minute, time.Duration(conf.ViewTimeout)*time.Millisecond)
+	srv.wendyec = hotstuff.NewFastWendyEC(replicaConfig, pm, conf.TLS, time.Minute, time.Duration(conf.ViewTimeout)*time.Millisecond, conf.ViewBenchmark)
 	srv.pm = pm.(interface{ Run(context.Context) })
 	// Use a custom server instead of the gorums one
 	srv.gorumsSrv.RegisterClientServer(srv)

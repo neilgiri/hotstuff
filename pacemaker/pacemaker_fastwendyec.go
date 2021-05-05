@@ -2,7 +2,9 @@ package pacemaker
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/relab/hotstuff"
@@ -171,6 +173,7 @@ func (p *RoundRobinFastWendyEC) startNewViewTimeout(stopContext context.Context)
 			return
 		case <-time.After(p.timeout):
 			// add a dummy block to the tree representing this round which failed
+			fmt.Println("Pacemaker view " + strconv.Itoa(p.GetHeight()))
 			logger.Println("NewViewTimeout triggered")
 			newHeight := p.GetHeight() + 1
 			p.SetLeaf(consensus.CreateLeafFastWendy(p.GetLeaf(), nil, nil, newHeight))

@@ -604,7 +604,7 @@ func TestOnReciveViewChangeWendyECNack(t *testing.T) {
 
 	wendy.bLeaf = CreateLeaf(block1, []Command{Command("commandnewheight")}, qc, block1.Height+1)
 	//t.Error(wendy.viewChangeMsgs[strconv.FormatInt(int64(targetView), 2)][2].Message)
-	proofNC := wendy.OnReceiveNack(nack)
+	proofNC := wendy.OnReceiveNack(nack, strconv.FormatInt(int64(targetView), 10))
 	pc, err := wendy.OnReceiveProofNC(&proofNC)
 
 	if pc == nil && err != nil {
@@ -669,9 +669,9 @@ func TestCheckViewChangeFastWendyEC(t *testing.T) {
 	msg1 := data.AggMessage{C: strconv.FormatInt(2, 2), V: strconv.FormatInt(int64(block2.Height+1), 2)}
 	sig1 := AS.SignShare(secretKeys, msg1)
 
-	newViewMsg := data.NewViewMsgFastWendy{LockCertificate: qcBlock1, Message: msg, Signature: sig, ID: 1,
+	newViewMsg := &data.NewViewMsgFastWendy{LockCertificate: qcBlock1, Message: msg, Signature: sig, ID: 1,
 		WeakLockCertificate: weakLock, MessageWeakLock: msg1, SignatureWeakLock: sig1, Vote: vote}
-	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)] = make([]NewViewMsgFastWendy, 1)
+	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)] = make([]*NewViewMsgFastWendy, 1)
 	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)][0] = newViewMsg
 
 	wendy.cmdCache.Add(Command("command3"))
@@ -739,9 +739,9 @@ func TestCheckViewChange2FastWendyEC(t *testing.T) {
 	msg1 := data.AggMessage{C: strconv.FormatInt(2, 2), V: strconv.FormatInt(int64(block2.Height+1), 2)}
 	sig1 := AS.SignShare(secretKeys, msg1)
 
-	newViewMsg := data.NewViewMsgFastWendy{LockCertificate: qcBlock1, Message: msg, Signature: sig, ID: 1,
+	newViewMsg := &data.NewViewMsgFastWendy{LockCertificate: qcBlock1, Message: msg, Signature: sig, ID: 1,
 		WeakLockCertificate: weakLock, MessageWeakLock: msg1, SignatureWeakLock: sig1, Vote: vote}
-	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)] = make([]NewViewMsgFastWendy, 1)
+	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)] = make([]*NewViewMsgFastWendy, 1)
 	wendy.viewChangeMsgs[strconv.FormatInt(int64(block2.Height+1), 2)][0] = newViewMsg
 
 	wendy.cmdCache.Add(Command("command3"))
